@@ -36,17 +36,34 @@ Follow these steps in order. They exist because each one has been skipped before
 
 ## Query syntax
 
-Queries are attribute-based. Different attributes are ANDed; several values for one attribute are ORed;
-values that contain spaces go in braces.
+Queries are attribute-based. Different attributes are ANDed by juxtaposition. Several values for one
+attribute are ORed — as a **comma list**, never in braces. A single value that contains spaces must be in
+braces.
 
-- `project: WEB` (alias `in: WEB`), `State: Open`, `Priority: {Critical, Major}`
+- `project: WEB` (alias `in: WEB`), `State: {In Progress}`, `Priority: Major`
+- `Priority: Critical, Major` — two values ORed; wrapped in braces, the same list matches nothing
 - `Assignee: me`; the bare keyword `#me` means assigned to, reported by, or commented by the current user
-- `#unresolved` / `#resolved`, `#<tag>`, and `-<value>` to exclude
+- `#unresolved` / `#resolved`, `#<tag>`
 - Free text is ANDed: `auth timeout` needs both words
 - Ranges use `..`: `created: {minus 7d} .. Today`, `created: * .. 2026-01-01`
 - Relative dates: `Today`, `Yesterday`, `{Last week}`, `{minus 2h}`
-- Sorting: `sort by: updated desc`
-- Explicit logic: `project: WEB (State: Open or State: Reopened)`
+- Sorting: `sort by: updated desc`, `sort by: created asc`
+
+### Three forms that silently return nothing
+
+Checked against a live server (YouTrack 2026.2): the parser accepts these and matches **zero** issues — no
+error, just an empty page. Never conclude "nothing found" from one of them.
+
+| Don't | Do |
+| --- | --- |
+| a multi-value brace set: `Priority: {Critical, Major}` | `Priority: Critical, Major` |
+| explicit logic: `project: WEB (State: Open or State: Reopened)` | two searches, merged by you |
+| excluding a custom-field value: `-State: Fixed`, `-Priority: Minor` | drop the clause, or filter the results yourself |
+
+An unbraced multi-word value (`State: In Progress`) also comes back empty — braces are required there, even
+for a single value. Negating a system attribute still works (`#me -resolved`), and either half of a broken
+query works on its own (`Priority: Critical` and `Priority: Major` each return their issues), so two
+separate searches are the reliable way to OR custom-field values.
 
 Working examples:
 
@@ -54,8 +71,13 @@ Working examples:
 - `project: {Web Site} created: {Last week} Type: Bug`
 - `#me -resolved updated: {minus 2h} .. *`
 
-A query that returns nothing does not mean the project is empty: confirm the project key with
-`find_projects` before concluding anything.
+A query that returns nothing does not mean the project is empty. Walk the query back before saying so: drop
+every clause but one, retry it alone, and add clauses back until the result goes empty — the culprit is
+usually one of the three forms above. Check the project key with `find_projects` only after that.
+
+`search_issues` fills `customFields` with only a few fields by default (Type / State / Assignee on the site
+this was checked against). Pass `customFieldsToReturn` (for example `["Priority", "State"]`) when the answer
+depends on another field.
 
 `search_issues` returns at most 20 issues per page (`limit` is capped at 20). When a result says
 `hasNextPage`, page with `offset` instead of narrowing the query just to fit one page.

@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+- Bundled `youtrack` skill: the query section now matches what the server actually accepts. An unbraced
+  multi-word value (`State: In Progress`) and three plausible-looking forms — multi-value braces, explicit
+  `or`, and excluding a custom-field value — all return an empty page with no error; the skill names the
+  working alternative (comma lists, two merged searches) and tells the agent to walk a query back clause by
+  clause before reporting "nothing found".
+
 ## [0.1.0]
 
 First release.
