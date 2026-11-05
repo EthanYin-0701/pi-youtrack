@@ -79,6 +79,10 @@ declared directly; the rest load through `tool_search`.
   file and `/youtrack status` can only warn you — tool names cannot reveal which definition is connected.
 - **A site switch or `/youtrack write on` needs a reconnect.** The new tool set may only appear on the next
   turn.
+- **Start a new session after installing.** The three directly-declared tools are only put in front of
+  the model when the server is already connected as the session's tool list is built. Install the package
+  in a running session and those three may stay invisible for the rest of it — the rest still arrive
+  through `tool_search`. A fresh session has all of them.
 - **Windows has no `0600`.** The file is still written atomically, but it is not protected by filesystem
   permissions there.
 - **`/youtrack setup` does not verify that the token's account can see the project you ask about.** YouTrack

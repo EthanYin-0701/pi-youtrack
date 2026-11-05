@@ -167,6 +167,8 @@ pi.registerMcpServer("youtrack", {
 - **已知时序**：注册后的连接是异步的。`setup` 已经等到工具出现才回报（上限 8 秒，轮询 200ms，因为 pi 没有
   「server 工具就绪」的扩展事件）；`write on` / `use` 不等，所以紧接着跑 `/youtrack status` 仍可能读到
   0 个工具——这不是故障。探活拿到的工具数不参与展示，避免两个数字互相矛盾。
+  `direct` 工具只在「请求构建工具表时 server 已连接」的情况下被声明：在已运行的会话里装包，那三个会一直缺席
+  且不进 `tool_search` 池（它们按 direct 分类），`deferred` 的其余工具仍可检索到。
 - **已知限制**：`?readOnlyTools=true` 会一并过滤没有 read-only 标注的自定义 MCP 工具（README 已写）。
 
 ## 包与发布
