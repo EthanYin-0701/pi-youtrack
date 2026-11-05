@@ -1,0 +1,52 @@
+{
+	"name": "pi-youtrack",
+	"version": "0.1.0",
+	"description": "One YouTrack permanent token away from having pi read and write your issues over YouTrack's official MCP server.",
+	"type": "module",
+	"license": "MIT",
+	"author": "Ethan Yin",
+	"keywords": [
+		"pi-package",
+		"youtrack",
+		"mcp",
+		"jetbrains",
+		"issues"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/EthanYin-0701/pi-youtrack.git"
+	},
+	"bugs": {
+		"url": "https://github.com/EthanYin-0701/pi-youtrack/issues"
+	},
+	"homepage": "https://github.com/EthanYin-0701/pi-youtrack#readme",
+	"pi": {
+		"extensions": [
+			"./extensions/youtrack/index.ts"
+		],
+		"skills": [
+			"./skills"
+		]
+	},
+	"files": [
+		"extensions",
+		"skills",
+		"README.md",
+		"CHANGELOG.md",
+		"LICENSE"
+	],
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"prepublishOnly": "npm run typecheck",
+		"test": "node tests/behavior.test.mjs"
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*"
+	},
+	"devDependencies": {
+		"@earendil-works/pi-coding-agent": "^1.5.0",
+		"@types/node": "^22.0.0",
+		"typescript": "^5.7.0",
+		"jiti": "^2.7.0"
+	}
+}
