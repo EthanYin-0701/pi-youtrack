@@ -244,46 +244,172 @@ clearEnv();
 seed({ acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:abcd1234", addedAt: "2026-01-01T00:00:00.000Z" } }, "acme");
 {
 	const confirm = await load(join(EXT_DIR, "confirm.ts"), dir);
+	const card = await load(join(EXT_DIR, "card.ts"), dir);
 
 	check("creates are gated", ["create_issue", "create_draft_issue", "create_article"].every((t) => confirm.shouldConfirm(t)));
 	check("reads and updates are not", !["search_issues", "get_issue", "update_issue", "add_issue_comment"].some((t) => confirm.shouldConfirm(t)));
 
-	const full = confirm.describeCall("create_issue", {
+	// ---- draft plumbing ----
+	const input = {
 		project: "PYP",
 		summary: "Login times out",
 		description: "x".repeat(120),
-		customFields: { Type: "Bug", Priority: "Major", "Fix versions": ["1.0"] },
+		customFields: { Type: "task", Priority: "Major", "Fix versions": ["1.0"] },
+	};
+	const draft = confirm.readDraft(input);
+	eq("draft reads the watched fields case-insensitively", draft.fields, {
+		Type: "task",
+		Priority: "Major",
+		Assignee: "",
+		Subsystem: "",
 	});
-	eq("confirm title names project and kind", full.title, "Create issue in PYP?");
-	check("shows the filled fields", /Type: Bug/.test(full.message) && /Priority: Major/.test(full.message), full.message);
-	check("shows the unset fields", /Assignee: —/.test(full.message) && /Subsystem: —/.test(full.message), full.message);
-	check("shows other custom fields", /Other fields: Fix versions=1\.0/.test(full.message), full.message);
-	check("measures the body instead of printing it", /Body: 120 characters/.test(full.message), full.message);
 
-	const bare = confirm.describeCall("create_issue", { project: "PYP", summary: "s" });
-	check("bare create still lists all four fields", ["Priority", "Type", "Assignee", "Subsystem"].every((f) => bare.message.includes(`${f}: —`)), bare.message);
+	const rows = confirm.buildRows("create_issue", draft);
+	eq("card offers create, four edits, cancel", rows.map((r) => r.label), [
+		"Create issue",
+		"Edit Type",
+		"Edit Priority",
+		"Edit Assignee",
+		"Edit Subsystem",
+		"Cancel",
+	]);
+	eq("rows show the current values", rows.slice(1, 5).map((r) => r.hint), ["task", "Major", "unset", "unset"]);
+	eq("articles have nothing to edit", confirm.buildRows("create_article", draft).map((r) => r.label), [
+		"Create article",
+		"Cancel",
+	]);
 
-	const draft = confirm.describeCall("create_draft_issue", { project: "PYP", summary: "s" });
-	eq("drafts have no field block", draft.title, "Create draft issue in PYP?");
-	check("drafts do not invent fields", !/Priority:/.test(draft.message), draft.message);
+	const head = confirm.describeDraft("create_issue", draft);
+	eq("card title names the kind", head.title, "Create issue");
+	check("header has project, summary, body size", head.header.join("|") === "Project: PYP|Summary: Login times out|Body: 120 characters", head.header.join("|"));
 
-	const h = harness();
-	await (await loadFactory(dir))(h.api);
-	const gate = h.handlers.get("tool_call");
-	check("tool_call handler registered", typeof gate === "function");
+	// ---- the loop, driven through the dialog fallback ----
+	const theme = { fg: (_color, text) => text, bold: (text) => text };
+	function cardCtx({ picks = [], custom = "unsupported", hasUI = true, schema } = {}) {
+		const seen = { select: [], input: [] };
+		const ctx = {
+			cwd: "/tmp",
+			hasUI,
+			ui: {
+				custom: async () => (custom === "unsupported" ? undefined : custom),
+				select: async (title, options) => {
+					seen.select.push({ title, options });
+					// Pick by name the way a user would: rows carry a " — hint" suffix, so match by prefix.
+					const wanted = picks.shift();
+					return options.find((option) => option === wanted || option.startsWith(wanted));
+				},
+				input: async (title) => {
+					seen.input.push(title);
+					return picks.shift();
+				},
+				notify: () => {},
+			},
+		};
+		return { ctx, seen, schema };
+	}
 
-	const deny = { ...h.ctx, ui: { ...h.ctx.ui, confirm: async () => false } };
-	const blocked = await gate({ toolName: "mcp__youtrack__create_issue", input: { project: "PYP", summary: "s" } }, deny);
-	eq("declining blocks the call", blocked?.block, true);
-	eq("declining explains what to do next", blocked?.reason, confirm.REFUSAL_REASON);
+	// create as drafted, no edits
+	{
+		const { ctx } = cardCtx({ picks: ["Create issue"] });
+		const call = { project: "PYP", summary: "s", customFields: { Type: "Task", "Fix versions": ["1.0"] } };
+		const result = await confirm.confirmCreate("create_issue", call, { ctx });
+		eq("create passes", result, { ok: true });
+		eq("untouched fields survive", call.customFields, { Type: "Task", "Fix versions": ["1.0"] });
+	}
 
-	const allowed = await gate({ toolName: "mcp__youtrack__create_issue", input: { project: "PYP", summary: "s" } }, h.ctx);
-	eq("confirming lets it through", allowed, undefined);
+	// cancel blocks and writes nothing
+	{
+		const { ctx } = cardCtx({ picks: ["Cancel"] });
+		const call = { project: "PYP", summary: "s" };
+		const result = await confirm.confirmCreate("create_issue", call, { ctx });
+		eq("cancel blocks", result.ok, false);
+		eq("cancel explains the next step", result.reason, confirm.REFUSAL_REASON);
+		eq("cancel leaves the call alone", call.customFields, undefined);
+	}
 
-	eq("read tools pass untouched", await gate({ toolName: "mcp__youtrack__search_issues", input: {} }, deny), undefined);
-	eq("update tools are not gated", await gate({ toolName: "mcp__youtrack__update_issue", input: {} }, deny), undefined);
-	eq("other servers are ignored", await gate({ toolName: "mcp__other__create_issue", input: {} }, deny), undefined);
-	eq("no UI means no block", await gate({ toolName: "mcp__youtrack__create_issue", input: { project: "PYP" } }, { ...deny, hasUI: false }), undefined);
+	// edit Type from the project schema, then create
+	{
+		const { ctx, seen } = cardCtx({ picks: ["Edit Type", "Bug", "Create issue"] });
+		const call = { project: "PYP", summary: "s" };
+		const result = await confirm.confirmCreate("create_issue", call, {
+			ctx,
+			lookupSchema: async () => ({ Type: { enum: ["Bug", "Task"] } }),
+		});
+		eq("edit then create passes", result, { ok: true });
+		eq("the chosen value lands in the call", call.customFields, { Type: "Bug" });
+		eq("the field dialog offers the schema values", seen.select[1].options, ["Bug", "Task", "(leave empty)"]);
+	}
+
+	// a free-text field takes an input instead of a select
+	{
+		const { ctx, seen } = cardCtx({ picks: ["Edit Assignee", "john.doe", "Create issue"] });
+		const call = { project: "PYP", summary: "s" };
+		await confirm.confirmCreate("create_issue", call, { ctx, lookupSchema: async () => ({}) });
+		eq("assignee goes through input", call.customFields, { Assignee: "john.doe" });
+		eq("no select for a free-text field", seen.select.length, 2);
+	}
+
+	// clearing a field removes it
+	{
+		const { ctx } = cardCtx({ picks: ["Edit Priority", "(leave empty)", "Create issue"] });
+		const call = { project: "PYP", summary: "s", customFields: { Priority: "Major" } };
+		await confirm.confirmCreate("create_issue", call, {
+			ctx,
+			lookupSchema: async () => ({ Priority: { enum: ["Major", "Minor"] } }),
+		});
+		eq("leaving a field empty drops it", call.customFields, undefined);
+	}
+
+	// host cannot draw a card, and no UI at all
+	{
+		const { ctx } = cardCtx({ custom: null });
+		eq("custom returning null blocks", (await confirm.confirmCreate("create_issue", {}, { ctx })).ok, false);
+		const silent = cardCtx({ hasUI: false });
+		eq("no UI lets the call through", await confirm.confirmCreate("create_issue", {}, { ctx: silent.ctx }), { ok: true });
+	}
+
+	// ---- the terminal menu itself ----
+	{
+		const menuRows = [
+			{ action: { kind: "create" }, label: "Create issue" },
+			{ action: { kind: "cancel" }, label: "Cancel" },
+		];
+		let settled;
+		const menu = new card.ConfirmMenu("Create issue", ["Project: PYP"], menuRows, theme, (v) => {
+			settled = v;
+		});
+		const lines = menu.render(80);
+		check("menu renders the title", lines.some((l) => l.includes("Create issue")), lines.join("\n"));
+		check("menu renders the header", lines.some((l) => l.includes("Project: PYP")), lines.join("\n"));
+		check("menu renders every row", menuRows.every((r) => lines.some((l) => l.includes(r.label))), lines.join("\n"));
+
+		menu.handleInput("\u001b[B");
+		menu.handleInput("\r");
+		eq("down then enter picks the second row", settled, { kind: "cancel" });
+
+		let escaped;
+		const menu2 = new card.ConfirmMenu("t", [], menuRows, theme, (v) => {
+			escaped = v;
+		});
+		menu2.handleInput("\u001b");
+		eq("escape backs out", escaped, null);
+	}
+
+	// ---- the gate registered on the extension ----
+	{
+		const h = harness();
+		await (await loadFactory(dir))(h.api);
+		const gate = h.handlers.get("tool_call");
+		check("tool_call handler registered", typeof gate === "function");
+		eq("read tools pass untouched", await gate({ toolName: "mcp__youtrack__search_issues", input: {} }, { ...h.ctx, ui: { ...h.ctx.ui, custom: async () => null } }), undefined);
+		eq("other servers are ignored", await gate({ toolName: "mcp__other__create_issue", input: {} }, { ...h.ctx, ui: { ...h.ctx.ui, custom: async () => null } }), undefined);
+		const blocked = await gate(
+			{ toolName: "mcp__youtrack__create_issue", input: { project: "PYP", summary: "s" } },
+			{ ...h.ctx, ui: { ...h.ctx.ui, custom: async () => null } },
+		);
+		eq("declining at the card blocks the call", blocked?.block, true);
+		eq("the block carries the refusal reason", blocked?.reason, confirm.REFUSAL_REASON);
+	}
 }
 
 rmSync(dir, { recursive: true, force: true });

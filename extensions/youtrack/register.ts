@@ -1,5 +1,5 @@
 import type { ExtensionAPI, McpExposure, McpServerConfig } from "@earendil-works/pi-coding-agent";
-import { mcpUrl } from "./probe.ts";
+import { mcpUrl } from "./mcp.ts";
 
 /** Fixed registration name; it does not step aside for a same-named entry in `mcp.json`. */
 export const SERVER_NAME = "youtrack";

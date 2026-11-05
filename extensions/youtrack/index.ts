@@ -11,7 +11,8 @@ import {
 	type YouTrackConfig,
 } from "./config.ts";
 import { probeEndpoint } from "./probe.ts";
-import { describeCall, REFUSAL_REASON, shouldConfirm } from "./confirm.ts";
+import { confirmCreate, shouldConfirm } from "./confirm.ts";
+import { projectSchema } from "./fields.ts";
 import { syncRegistration, SERVER_NAME, type Desired } from "./register.ts";
 import {
 	countServerTools,
@@ -93,12 +94,18 @@ export default async function youtrack(pi: ExtensionAPI) {
 		if (!event.toolName.startsWith(prefix)) return;
 		const tool = event.toolName.slice(prefix.length);
 		if (!shouldConfirm(tool)) return;
-		// No UI means a scripted session; blocking there would hang instead of asking.
-		if (!ctx.hasUI) return;
 
-		const { title, message } = describeCall(tool, event.input);
-		if (await ctx.ui.confirm(title, message)) return;
-		return { block: true, reason: REFUSAL_REASON };
+		const outcome = await confirmCreate(tool, event.input, {
+			ctx,
+			lookupSchema: (project: string) => {
+				const desired = desiredCurrent();
+				return desired
+					? projectSchema(desired.baseUrl, desired.token, project)
+					: Promise.resolve(undefined);
+			},
+		});
+		if (outcome.ok) return;
+		return { block: true, reason: outcome.reason };
 	});
 
 	function showStatus(cwd: string): void {

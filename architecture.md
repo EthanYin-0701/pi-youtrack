@@ -38,23 +38,30 @@ tool_search、权限钩子，以及工具名 `mcp__youtrack__*` 的生成。
 | 工具暴露 | 服务器 `deferred` + 三个 `toolExposure: direct` | `deferred` 让 tool_search 自动激活、其余工具不占 prompt；`search_issues`/`get_issue`/`get_current_user` 是每次对话的入口，直连 |
 | 切换/开写 | 用新 config **重注册同名** server | pi 文档与实现都保证：同名且配置不同 ⇒ 丢弃旧条目、`hideTools`、关连接、连新的。不需要 `unregister` 再 `register` 的竞态 |
 | 写操作确认 | `tool_call` 钩子拦三个 `create_*` | 模型可以不遵守 skill，钩子在 pi 的工具管线里绕不过去；非交互模式（无 UI）放行，否则脚本会挂 |
+| 确认交互 | `ui.custom` 卡片，画不了就退 `ui.select` | 终端里能上下选、原地改字段；RPC 宿主画不了自定义组件（返回 `undefined`）时自动降级，不是报错 |
+| 字段候选值 | 扩展自己调一次 `get_issue_fields_schema`，按站点+项目缓存 30 分钟 | 枚举是项目定的，硬编码会错；只在用户真要改 Type/Priority 时才拉，建单流程不为它多付一次往返 |
 | skill 触发 | frontmatter `disable-model-invocation: true` | 只在 `/skill:youtrack` 显式调用时加载，普通对话不自动命中（用户的要求） |
 | 令牌校验 | 自己发一次 MCP `initialize` | 复用不了 pi 的连接（连接是异步且不回报失败的）；`initialize` 同时验证「地址是 MCP 端点」和「令牌有效」两件事 |
 | 构建 | 无 | jiti 直接转译 TS 并解析相对 import，扩展目录内多文件可用。零依赖 ⇒ CI 只有 `npm publish` 一步 |
 
 ## 模块划分
 
-`extensions/youtrack/` 内六个文件，依赖方向单向，无环：
+`extensions/youtrack/` 内八个文件，依赖方向单向，无环：
 
 ```
 index.ts ──┬─→ config.ts     读/写 youtrack.json、profile CRUD、原子写与 0600
            ├─→ register.ts   拼 McpServerConfig、register/unregister、防重复重连
-           ├─→ probe.ts      发 initialize 做校验，返回结构化结果
-           ├─→ confirm.ts    写入前确认的纯函数：哪些工具要拦、确认框里显示什么
+           ├─→ probe.ts      setup 前的 initialize 探活
+           ├─→ fields.ts     项目字段 schema，供确认卡列可选值（按项目缓存）
+           ├─→ confirm.ts    建单前的确认流程：读 draft → 卡片 → 把结果写回 event.input
            └─→ status.ts     拼 /youtrack 的输出文本、令牌脱敏、等待工具就绪
+
+confirm.ts ─→ card.ts        终端卡片组件 + 画不了时的 select 降级
+probe.ts / fields.ts ─→ mcp.ts  最小 JSON-RPC 传输（initialize / tools.list / tools.call）
 ```
 
-`register.ts` 依赖 `probe.ts`（拼 URL），`confirm.ts` 不依赖任何模块——它是纯函数，桩测直接打它。
+`mcp.ts` 只做传输：它不实现 MCP 客户端，pi 才是连工具的那个——这里发请求只为了 setup 校验和取字段
+schema。`confirm.ts` 不直接碰 TUI 细节，卡片在 `card.ts` 里，桩测能单独打这两层。
 `index.ts` 是唯一注册命令与事件的地方。
 
 ## 配置契约

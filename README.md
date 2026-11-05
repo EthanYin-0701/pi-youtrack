@@ -48,13 +48,33 @@ start.
 ## Confirming before it writes
 
 Creating things is the one place a wrong field is both costly and easy to miss, so the extension gates it in
-pi's tool pipeline (`create_issue`, `create_draft_issue`, `create_article`). Before the call runs, a
-confirmation lists the project, the summary, and Priority / Type / Assignee / Subsystem — with `—` where the
-agent left them empty — plus any other custom fields. Decline it and the call is blocked; the agent is told
-to go back and ask you about those fields instead of retrying.
+pi's tool pipeline (`create_issue`, `create_draft_issue`, `create_article`). Instead of a yes/no prompt you get
+a card:
 
-Only creation is gated. Updates, comments, tags, links, and work items run without a prompt. Sessions
-without a UI (`pi -p`, RPC) are never blocked.
+```
+Create issue
+Project: PYP
+Summary: Login times out
+
+› Create issue
+  Edit Type — Task
+  Edit Priority — Major
+  Edit Assignee — unset
+  Edit Subsystem — unset
+  Cancel
+
+↑↓ move · Enter select · Esc cancel
+```
+
+`Edit Type` and `Edit Priority` list the values the project actually accepts (the extension reads
+`get_issue_fields_schema` once per project and caches it); `Assignee` and `Subsystem` take free text.
+Whatever you pick is written into the call in place — no cancel-and-retry, no second round trip through the
+model. Cancel blocks the call and tells the agent to go back and ask.
+
+Hosts that cannot draw custom components (RPC, an IDE sidebar) fall back to a select dialog with the same
+choices. A session with no UI at all (`pi -p`) is never blocked.
+
+Only creation is gated. Updates, comments, tags, links, and work items run without a prompt.
 
 The bundled skill describes the same order as a procedure — check access, resolve the project, read the field
 schema, post a field draft and wait, then create — and it is loaded only through `/skill:youtrack`, never
