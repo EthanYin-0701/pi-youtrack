@@ -127,7 +127,7 @@ pi.registerMcpServer("youtrack", {
 | 用法 | 行为 |
 | --- | --- |
 | `/youtrack` / `status` | active profile 名、基址、令牌尾 4 位、写权限状态、已连接工具数（数 `pi.getAllTools()` 里 `mcp__youtrack__*` 的条数）、是否被 `mcp.json` 覆盖 |
-| `setup [name]` | 依次 `ui.input` 问基址 → 站点名 → 令牌 → 探活 → 落盘 → 重注册。已存在同名则就地更新 |
+| `setup [name]` | 依次 `ui.input` 问基址 → 站点名 → 令牌 → 探活 → 落盘 → 重注册 → 等工具真的出现在 pi 的工具表里（最多 8 秒），把**真实注册数**写进回报；超时则报「仍在连接」。已存在同名则就地更新 |
 | `list` | 所有 profile，标出 active，令牌一律只显示尾 4 位 |
 | `use <name>` | 改 `active` 并重注册；不存在则报错列出可选值 |
 | `write on\|off` | 仅改本会话的 `writeEnabled` 并重注册。`on` 时提示「仅本会话有效，工具正在重连」 |
@@ -164,8 +164,9 @@ pi.registerMcpServer("youtrack", {
   加载期 `registerMcpServer` 被 pi 接受；配置读写、0600、非法 profile 整文件拒绝、URL 拼装、`/youtrack`
   全命令面、重注册与指纹去抖、env 覆盖均有桩测覆盖（`tests/behavior.test.mjs`，用 pi 自己那份 jiti，
   与加载器同一实现）。
-- **已知时序**：注册后的连接是异步的，`/youtrack setup` 保存完立刻跑 `/youtrack status` 可能读到尚未连上的瞬间
-  （显示 0 个工具）——这不是故障，下一轮或再次 status 即正常。命令文案已如此说明。
+- **已知时序**：注册后的连接是异步的。`setup` 已经等到工具出现才回报（上限 8 秒，轮询 200ms，因为 pi 没有
+  「server 工具就绪」的扩展事件）；`write on` / `use` 不等，所以紧接着跑 `/youtrack status` 仍可能读到
+  0 个工具——这不是故障。探活拿到的工具数不参与展示，避免两个数字互相矛盾。
 - **已知限制**：`?readOnlyTools=true` 会一并过滤没有 read-only 标注的自定义 MCP 工具（README 已写）。
 
 ## 包与发布

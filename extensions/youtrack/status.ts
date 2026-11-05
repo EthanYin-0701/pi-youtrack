@@ -10,6 +10,26 @@ export function countServerTools(pi: ExtensionAPI, server: string): number {
 }
 
 /**
+ * Registering a server returns before it connects, so a just-finished `/youtrack setup` would report a
+ * site with no tools yet. Poll until they appear, bounded: pi fires no event when a server's tools land
+ * in the tool table, and `mcp_servers_change` only covers registration.
+ */
+export async function waitForServerTools(
+	pi: ExtensionAPI,
+	server: string,
+	timeoutMs: number,
+	intervalMs = 200,
+): Promise<{ count: number; timedOut: boolean }> {
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
+		const count = countServerTools(pi, server);
+		if (count > 0) return { count, timedOut: false };
+		if (Date.now() >= deadline) return { count, timedOut: true };
+		await new Promise((resolve) => setTimeout(resolve, intervalMs));
+	}
+}
+
+/**
  * A same-named server in `mcp.json` silently wins over our registration (pi prefers the file). Since
  * tool names cannot tell the two sources apart, status has to say so out loud.
  */

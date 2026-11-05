@@ -199,6 +199,32 @@ seed(
 	eq("remove falls back to the remaining site", afterRemove.active, "acme");
 }
 
+// ------------------------------------------------------- wait for tools ---
+{
+	const { waitForServerTools } = await load(join(EXT_DIR, "status.ts"), dir);
+
+	const never = { getAllTools: () => [] };
+	eq("times out when nothing ever connects", await waitForServerTools(never, "youtrack", 120, 20), {
+		count: 0,
+		timedOut: true,
+	});
+
+	let calls = 0;
+	const eventually = {
+		getAllTools: () => {
+			calls += 1;
+			return calls < 3
+				? []
+				: [{ name: "mcp__youtrack__search_issues" }, { name: "mcp__youtrack__get_issue" }];
+		},
+	};
+	eq("reports the real count once tools land", await waitForServerTools(eventually, "youtrack", 2000, 10), {
+		count: 2,
+		timedOut: false,
+	});
+	check("kept polling until they appeared", calls >= 3, `calls=${calls}`);
+}
+
 // ---------------------------------------------------------- env override ---
 {
 	const h = harness();

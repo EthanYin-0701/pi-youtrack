@@ -11,8 +11,15 @@ import {
 	type YouTrackConfig,
 } from "./config.ts";
 import { probeEndpoint } from "./probe.ts";
-import { syncRegistration, type Desired } from "./register.ts";
-import { countServerTools, formatProfileList, formatStatus, hasConflictingMcpEntry, type StatusInput } from "./status.ts";
+import { syncRegistration, SERVER_NAME, type Desired } from "./register.ts";
+import {
+	countServerTools,
+	formatProfileList,
+	formatStatus,
+	hasConflictingMcpEntry,
+	waitForServerTools,
+	type StatusInput,
+} from "./status.ts";
 
 const SUBCOMMANDS = ["status", "setup", "list", "use", "write", "remove"] as const;
 
@@ -144,14 +151,23 @@ export default async function youtrack(pi: ExtensionAPI) {
 
 		writeEnabled = false;
 		apply(desiredCurrent(), ctx);
-		const tools = probe.toolCount === undefined ? "" : `, MCP reports ${probe.toolCount} tools`;
-		report(
-			[
-				`Saved site \`${name}\` → ${baseUrl}/mcp${tools}.`,
-				`Token stored in ${configPath()} (0600, showing only ${redactToken(token)}).`,
-				"Read-only by default — run `/youtrack write on` before asking the agent to change issues.",
-			].join("\n"),
+
+		// Report what pi actually connected, not what the probe saw: those two numbers disagree while
+		// the connection is still in flight, and seeing both is what confused the first user.
+		const connected = await waitForServerTools(pi, SERVER_NAME, 8_000);
+		const lines = [
+			connected.timedOut
+				? `Saved site \`${name}\` → ${baseUrl}/mcp, still connecting.`
+				: `Saved site \`${name}\` → ${baseUrl}/mcp, ${connected.count} tools connected.`,
+		];
+		if (connected.timedOut) {
+			lines.push("Run `/youtrack status` in a moment; `/mcp` shows the connection detail.");
+		}
+		lines.push(
+			`Token stored in ${configPath()} (0600, showing only ${redactToken(token)}).`,
+			"Read-only by default — run `/youtrack write on` before asking the agent to change issues.",
 		);
+		report(lines.join("\n"));
 	}
 
 	async function runUse(ctx: ExtensionCommandContext, name: string | undefined): Promise<void> {
