@@ -150,7 +150,9 @@ pi.registerMcpServer("youtrack", {
 流程之外必须覆盖的知识：
 
 1. 工具前缀 `mcp__youtrack__`，不认识的工具先用 `tool_search` 搜，别猜工具名。
-2. 查询语法：`project: WEB`、`#unresolved`、`#me`、`sort by: updated desc`、日期区间、单页 20 条要 `offset`。
+2. 查询语法：`project: WEB`、`#unresolved`、`#me`、`sort by: updated desc`、日期区间、单页 20 条要 `offset`；
+   以及**静默返回空页的写法**（花括号多值、显式 `or`、自定义字段取反）与可用替代，否则模型会把它
+   误当成「项目没问题」报给用户。
 3. `create_issue` 的 `customFields` 是「字段名 → 值」的对象，值必须来自 schema；草稿 issue 只有
    `project` + `summary`；`add_attachment` 用返回的 `createdIssue.id` 作 target。
 4. 一条硬规则：**所有 YouTrack 数据必须来自 `mcp__youtrack__*` 的工具结果**，不许用 bash/curl 直接打
@@ -168,6 +170,13 @@ pi.registerMcpServer("youtrack", {
 - **已实测（yt-air-demo.youtrack.cloud / YouTrack MCP 2026.2，2026-11）**：探活返回 23 个工具；真实 pi 会话里
   拿到恰好三个 `direct` 工具（`mcp__youtrack__search_issues` / `get_issue` / `get_current_user`），
   其余经 `tool_search`；只读模式下列表从 23 降到 13（`readOnlyTools=true` 在服务端滤掉 10 个写工具）；`/youtrack write on` 后写工具出现，并在 `PYP` 项目实建 issue（PYP-1）。
+- **已实测（yt-air-demo.youtrack.cloud，2026-11，查询语法逐条核对）**：`project:` / `in:`、`#unresolved`、
+  `#me`、`-resolved`、`{Last week}`、`{minus 2h} .. *`、`sort by: created asc`、`offset` 翻页、
+  `project: {含横线的项目名}`、单值花括号（`State: {In Progress}`）均正确；逗号列表是真 OR（`Priority: Critical, Major`
+  恰好是两值并集）。**三种写法静默返回空页**：花括号多值 `Priority: {Critical, Major}`、显式
+  `(State: Open or State: Reopened)`、自定义字段取反 `-State: Fixed` / `-Priority: Minor`；不带花括号的空格值
+  （`State: In Progress`）同样返回空页。不可排序的属性（`sort by: id asc`）也是空页而不是报错。skill 的
+  查询章节按这份实测改写。
 - **已实测（本地）**：jiti 解析扩展目录内的相对 `import`，多文件可用；`getAgentDir()` 返回真实的 agent 目录；
   加载期 `registerMcpServer` 被 pi 接受；配置读写、0600、非法 profile 整文件拒绝、URL 拼装、`/youtrack`
   全命令面、重注册与指纹去抖、env 覆盖均有桩测覆盖（`tests/behavior.test.mjs`，用 pi 自己那份 jiti，
