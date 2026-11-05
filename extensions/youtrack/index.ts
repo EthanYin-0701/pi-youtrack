@@ -11,6 +11,7 @@ import {
 	type YouTrackConfig,
 } from "./config.ts";
 import { probeEndpoint } from "./probe.ts";
+import { describeCall, REFUSAL_REASON, shouldConfirm } from "./confirm.ts";
 import { syncRegistration, SERVER_NAME, type Desired } from "./register.ts";
 import {
 	countServerTools,
@@ -83,6 +84,21 @@ export default async function youtrack(pi: ExtensionAPI) {
 		writeEnabled = false;
 		apply(desiredCurrent(), ctx);
 		if (notice) ctx.ui.notify(notice, "warning");
+	});
+
+	// MCP calls run through pi's tool pipeline, so this covers what the agent writes however it decided
+	// to call the tool. Only creation is gated: a wrong field is costly there and easy to miss.
+	pi.on("tool_call", async (event, ctx) => {
+		const prefix = `mcp__${SERVER_NAME}__`;
+		if (!event.toolName.startsWith(prefix)) return;
+		const tool = event.toolName.slice(prefix.length);
+		if (!shouldConfirm(tool)) return;
+		// No UI means a scripted session; blocking there would hang instead of asking.
+		if (!ctx.hasUI) return;
+
+		const { title, message } = describeCall(tool, event.input);
+		if (await ctx.ui.confirm(title, message)) return;
+		return { block: true, reason: REFUSAL_REASON };
 	});
 
 	function showStatus(cwd: string): void {

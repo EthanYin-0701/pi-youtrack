@@ -48,6 +48,7 @@ function harness() {
 	};
 	const ctx = {
 		cwd: process.cwd(),
+		hasUI: true,
 		ui: {
 			notify: (message, type) => notices.push(`${type ?? "info"}:${message}`),
 			input: async () => undefined,
@@ -236,6 +237,53 @@ seed(
 	await h.commands.get("youtrack").handler("status", h.ctx);
 	check("status says it came from the environment", /environment, not stored/.test(h.messages.at(-1) ?? ""), h.messages.at(-1));
 	eq("env override does not touch the file", JSON.parse(readFileSync(join(dir, "youtrack.json"), "utf8")).active, "acme");
+}
+
+// ------------------------------------------------------ write confirmation ---
+clearEnv();
+seed({ acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:abcd1234", addedAt: "2026-01-01T00:00:00.000Z" } }, "acme");
+{
+	const confirm = await load(join(EXT_DIR, "confirm.ts"), dir);
+
+	check("creates are gated", ["create_issue", "create_draft_issue", "create_article"].every((t) => confirm.shouldConfirm(t)));
+	check("reads and updates are not", !["search_issues", "get_issue", "update_issue", "add_issue_comment"].some((t) => confirm.shouldConfirm(t)));
+
+	const full = confirm.describeCall("create_issue", {
+		project: "PYP",
+		summary: "Login times out",
+		description: "x".repeat(120),
+		customFields: { Type: "Bug", Priority: "Major", "Fix versions": ["1.0"] },
+	});
+	eq("confirm title names project and kind", full.title, "Create issue in PYP?");
+	check("shows the filled fields", /Type: Bug/.test(full.message) && /Priority: Major/.test(full.message), full.message);
+	check("shows the unset fields", /Assignee: —/.test(full.message) && /Subsystem: —/.test(full.message), full.message);
+	check("shows other custom fields", /Other fields: Fix versions=1\.0/.test(full.message), full.message);
+	check("measures the body instead of printing it", /Body: 120 characters/.test(full.message), full.message);
+
+	const bare = confirm.describeCall("create_issue", { project: "PYP", summary: "s" });
+	check("bare create still lists all four fields", ["Priority", "Type", "Assignee", "Subsystem"].every((f) => bare.message.includes(`${f}: —`)), bare.message);
+
+	const draft = confirm.describeCall("create_draft_issue", { project: "PYP", summary: "s" });
+	eq("drafts have no field block", draft.title, "Create draft issue in PYP?");
+	check("drafts do not invent fields", !/Priority:/.test(draft.message), draft.message);
+
+	const h = harness();
+	await (await loadFactory(dir))(h.api);
+	const gate = h.handlers.get("tool_call");
+	check("tool_call handler registered", typeof gate === "function");
+
+	const deny = { ...h.ctx, ui: { ...h.ctx.ui, confirm: async () => false } };
+	const blocked = await gate({ toolName: "mcp__youtrack__create_issue", input: { project: "PYP", summary: "s" } }, deny);
+	eq("declining blocks the call", blocked?.block, true);
+	eq("declining explains what to do next", blocked?.reason, confirm.REFUSAL_REASON);
+
+	const allowed = await gate({ toolName: "mcp__youtrack__create_issue", input: { project: "PYP", summary: "s" } }, h.ctx);
+	eq("confirming lets it through", allowed, undefined);
+
+	eq("read tools pass untouched", await gate({ toolName: "mcp__youtrack__search_issues", input: {} }, deny), undefined);
+	eq("update tools are not gated", await gate({ toolName: "mcp__youtrack__update_issue", input: {} }, deny), undefined);
+	eq("other servers are ignored", await gate({ toolName: "mcp__other__create_issue", input: {} }, deny), undefined);
+	eq("no UI means no block", await gate({ toolName: "mcp__youtrack__create_issue", input: { project: "PYP" } }, { ...deny, hasUI: false }), undefined);
 }
 
 rmSync(dir, { recursive: true, force: true });

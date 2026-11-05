@@ -1,6 +1,7 @@
 ---
 name: youtrack
 description: Search, read, and update YouTrack issues, articles, projects, and work items through the YouTrack MCP server registered by the pi-youtrack extension. Use whenever the task involves YouTrack, an issue id like WEB-123, a YouTrack query, or logging work.
+disable-model-invocation: true
 ---
 
 # YouTrack
@@ -10,12 +11,28 @@ Only `search_issues`, `get_issue`, and `get_current_user` are declared directly;
 through `tool_search`. If a tool you expect is missing, run `tool_search` with the goal ("create a YouTrack
 issue") instead of guessing a name.
 
-## Access mode
+Every YouTrack fact must come from a `mcp__youtrack__*` tool result. Never read or write YouTrack data with
+`bash`, `curl`, or a raw HTTP call against `/mcp` — the token and the tool contract live inside these tools.
 
-If the write tools (`create_issue`, `update_issue`, `add_issue_comment`, `log_work`, `link_issues`,
-`manage_issue_tags`) are missing, the session is read-only. Tell the user to run `/youtrack write on` and
-continue once they have. Never retry with a different tool name, and never report a change as made when no
-write tool ran.
+## Procedure
+
+Follow these steps in order. They exist because each one has been skipped before.
+
+1. **Check access.** If the write tools (`create_issue`, `update_issue`, `add_issue_comment`, `log_work`,
+   `link_issues`, `manage_issue_tags`) are missing, the session is read-only: say so, ask the user to run
+   `/youtrack write on`, and stop. Never retry a write under another tool name.
+2. **Resolve the project.** `find_projects` for the key. Never invent a key, and never infer one from a
+   summary or a URL.
+3. **Read the schema.** `get_issue_fields_schema` for that project, every time before creating.
+4. **Post the field draft, then wait.** Before anything that creates an issue, show the user:
+
+   - **Summary** — what you intend to write
+   - **Type / Priority / Assignee / Subsystem** — a proposed value, or "leave empty"
+
+   Then stop and wait for their reply. Do not call `create_issue` in the same turn as the draft.
+5. **Create, then report.** Call the tool and quote the returned id and URL exactly as returned.
+6. **If a call comes back blocked by a confirmation,** the user declined it. Return to step 4 with what
+   they said; never retry the same call unchanged.
 
 ## Query syntax
 
@@ -45,14 +62,15 @@ A query that returns nothing does not mean the project is empty: confirm the pro
 
 ## Creating an issue
 
-1. `find_projects` to resolve the project key. Never invent one.
-2. `get_issue_fields_schema` for that project to learn the required custom fields and their allowed values.
-3. `create_issue` with a summary, a Markdown description, and every required field. If a required value is
-   not in the schema, ask the user instead of guessing — an unknown value makes YouTrack reject the call.
-4. `add_attachment` takes the `createdIssue.id` from step 3 as its target.
+`create_issue` takes `project`, `summary`, an optional Markdown `description`, and `customFields` as an
+object of field name to value, for example `{"Type": "Task", "Priority": "Minor"}`. Values must come from
+the schema — an unknown value makes YouTrack reject the whole call. If a required field the schema lists has
+no obvious value, ask the user instead of guessing.
 
-Prefer `create_draft_issue` when the user wants to review the text first: a draft is visible only to them and
-can be updated afterwards.
+Prefer `create_draft_issue` when the user wants to review the text first: a draft is visible only to them,
+takes only `project` and `summary`, and can be updated afterwards.
+
+`add_attachment` takes the `createdIssue.id` from the create result as its target.
 
 ## Reading and commenting
 

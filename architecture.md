@@ -37,22 +37,25 @@ tool_search、权限钩子，以及工具名 `mcp__youtrack__*` 的生成。
 | 默认只读的实现层 | 注册 URL 加 `?readOnlyTools=true` | 在**服务端**过滤，写工具根本不进工具表——不是"调用被拒"。比客户端权限门更硬，也不需要维护工具清单 |
 | 工具暴露 | 服务器 `deferred` + 三个 `toolExposure: direct` | `deferred` 让 tool_search 自动激活、其余工具不占 prompt；`search_issues`/`get_issue`/`get_current_user` 是每次对话的入口，直连 |
 | 切换/开写 | 用新 config **重注册同名** server | pi 文档与实现都保证：同名且配置不同 ⇒ 丢弃旧条目、`hideTools`、关连接、连新的。不需要 `unregister` 再 `register` 的竞态 |
+| 写操作确认 | `tool_call` 钩子拦三个 `create_*` | 模型可以不遵守 skill，钩子在 pi 的工具管线里绕不过去；非交互模式（无 UI）放行，否则脚本会挂 |
+| skill 触发 | frontmatter `disable-model-invocation: true` | 只在 `/skill:youtrack` 显式调用时加载，普通对话不自动命中（用户的要求） |
 | 令牌校验 | 自己发一次 MCP `initialize` | 复用不了 pi 的连接（连接是异步且不回报失败的）；`initialize` 同时验证「地址是 MCP 端点」和「令牌有效」两件事 |
 | 构建 | 无 | jiti 直接转译 TS 并解析相对 import，扩展目录内多文件可用。零依赖 ⇒ CI 只有 `npm publish` 一步 |
 
 ## 模块划分
 
-`extensions/youtrack/` 内五个文件，依赖方向单向，无环：
+`extensions/youtrack/` 内六个文件，依赖方向单向，无环：
 
 ```
 index.ts ──┬─→ config.ts     读/写 youtrack.json、profile CRUD、原子写与 0600
            ├─→ register.ts   拼 McpServerConfig、register/unregister、防重复重连
            ├─→ probe.ts      发 initialize 做校验，返回结构化结果
-           └─→ status.ts     拼 /youtrack 的输出文本、令牌脱敏
+           ├─→ confirm.ts    写入前确认的纯函数：哪些工具要拦、确认框里显示什么
+           └─→ status.ts     拼 /youtrack 的输出文本、令牌脱敏、等待工具就绪
 ```
 
-`register.ts` 依赖 `config.ts`（取 profile 与写开关），其余互不依赖。`index.ts` 是唯一注册
-命令与事件的地方。
+`register.ts` 依赖 `probe.ts`（拼 URL），`confirm.ts` 不依赖任何模块——它是纯函数，桩测直接打它。
+`index.ts` 是唯一注册命令与事件的地方。
 
 ## 配置契约
 
@@ -140,13 +143,18 @@ pi.registerMcpServer("youtrack", {
 
 ## Skill 契约
 
-`skills/youtrack/SKILL.md` 必须覆盖四件事，否则 agent 会靠试错：
+`skills/youtrack/SKILL.md` 以一段**固定流程（Procedure）**开头，后面才是知识库。流程是六步：
+检查写权限 → `find_projects` 定项目 → `get_issue_fields_schema` 读 schema → **贴字段草稿并等用户回复**
+→ 调用工具并原样引用返回的 id/URL → 被确认框拦下时回到第 4 步而不是原样重试。
+
+流程之外必须覆盖的知识：
 
 1. 工具前缀 `mcp__youtrack__`，不认识的工具先用 `tool_search` 搜，别猜工具名。
-2. 查询语法：`project: WEB`、`#unresolved`、`#me` / `for: me`、`sort by: updated desc`、日期区间。
-3. 建 issue 的顺序：`find_projects` → `get_issue_fields_schema` 取必填自定义字段 → `create_issue`；
-   `add_attachment` 用返回的 `createdIssue.id` 作 target。
-4. 写工具不可见时是**权限没开**，让用户运行 `/youtrack write on`，不要换个工具名重试。
+2. 查询语法：`project: WEB`、`#unresolved`、`#me`、`sort by: updated desc`、日期区间、单页 20 条要 `offset`。
+3. `create_issue` 的 `customFields` 是「字段名 → 值」的对象，值必须来自 schema；草稿 issue 只有
+   `project` + `summary`；`add_attachment` 用返回的 `createdIssue.id` 作 target。
+4. 一条硬规则：**所有 YouTrack 数据必须来自 `mcp__youtrack__*` 的工具结果**，不许用 bash/curl 直接打
+   `/mcp` 端点——这条来自真实事故：agent 曾经绕过 MCP 去直连端点。
 
 ## 安全不变量
 

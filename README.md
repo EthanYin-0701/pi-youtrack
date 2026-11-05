@@ -45,6 +45,21 @@ This package is what that route leaves you to do by hand:
 Everything after `/youtrack setup` is optional: the extension registers the active site on every session
 start.
 
+## Confirming before it writes
+
+Creating things is the one place a wrong field is both costly and easy to miss, so the extension gates it in
+pi's tool pipeline (`create_issue`, `create_draft_issue`, `create_article`). Before the call runs, a
+confirmation lists the project, the summary, and Priority / Type / Assignee / Subsystem — with `—` where the
+agent left them empty — plus any other custom fields. Decline it and the call is blocked; the agent is told
+to go back and ask you about those fields instead of retrying.
+
+Only creation is gated. Updates, comments, tags, links, and work items run without a prompt. Sessions
+without a UI (`pi -p`, RPC) are never blocked.
+
+The bundled skill describes the same order as a procedure — check access, resolve the project, read the field
+schema, post a field draft and wait, then create — and it is loaded only through `/skill:youtrack`, never
+automatically.
+
 ## Requirements
 
 - pi with built-in MCP support (streamable HTTP). No other extension replaces `/mcp`.

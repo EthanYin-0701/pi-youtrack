@@ -104,9 +104,13 @@ pi 今天就能连 YouTrack：`pi mcp add --url https://acme.youtrack.cloud/mcp 
    其余工具按需经 `tool_search` 加载，避免每次请求都带上全部 schema。
 6. **管理命令**：`/youtrack` 覆盖 `setup` / `list` / `use` / `status` / `remove` / `write on|off`，
    `status` 显示 active 站点、写权限状态、工具数量与连接状态。
-7. **附带 skill**：一个 `youtrack` skill，写清楚查询语法、建 issue 前先用 `get_issue_fields_schema`
-   拿必填自定义字段、草稿 issue 与正式 issue 的区别、评论/附件的 `target` 约定。
-8. **发布链路**：npm 包声明 `pi-package` keyword，推 `v*` tag 由 GitHub Actions 发布，
+7. **附带 skill**：一个 `youtrack` skill，以固定流程开头（查权限 → 定项目 → 读 schema → 贴字段草稿等回复
+   → 调用 → 被拦则回上一步），再写清楚查询语法、`customFields` 的取值来源、草稿 issue 与正式 issue 的区别、
+   评论/附件的 `target` 约定。只在 `/skill:youtrack` 显式调用时加载。
+8. **新建前确认**：`create_issue` / `create_draft_issue` / `create_article` 执行前弹一次确认，列出 Project、
+   Summary 与 Priority / Type / Assignee / Subsystem（含留空项）；用户取消则拦下这次调用，并把
+   「回去和用户确认这四个字段」作为原因回给模型。只拦新建类；无 UI 的会话不拦。
+9. **发布链路**：npm 包声明 `pi-package` keyword，推 `v*` tag 由 GitHub Actions 发布，
    仓库带 MIT LICENSE 与 CHANGELOG。
 
 ## Non-Functional Requirements
