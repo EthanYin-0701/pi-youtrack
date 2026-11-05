@@ -25,7 +25,7 @@ pi 今天就能连 YouTrack：`pi mcp add --url https://acme.youtrack.cloud/mcp 
 
 - 要先去 YouTrack 生成永久令牌，再决定它放哪（环境变量？`mcp.json` 的 `headers`？），每换一台机器重来一遍；
   同时维护多个站点（客户站点 + 自家站点）时尤其难受。
-- 配好之后模型拿到约 20 个工具，但 YouTrack 的查询语法（`#unresolved #me project: WEB`）和
+- 配好之后模型拿到 23 个工具，但 YouTrack 的查询语法（`#unresolved #me project: WEB`）和
   「建 issue 前必须先查项目的必填自定义字段」这两件事不在工具描述里，agent 只能试错、反复报错重试。
 - 默认全权限意味着 agent 在跑重构任务时可能顺手 `create_issue` 或改状态，而且很难撤销。
 

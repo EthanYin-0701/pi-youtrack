@@ -40,6 +40,9 @@ Working examples:
 A query that returns nothing does not mean the project is empty: confirm the project key with
 `find_projects` before concluding anything.
 
+`search_issues` returns at most 20 issues per page (`limit` is capped at 20). When a result says
+`hasNextPage`, page with `offset` instead of narrowing the query just to fit one page.
+
 ## Creating an issue
 
 1. `find_projects` to resolve the project key. Never invent one.

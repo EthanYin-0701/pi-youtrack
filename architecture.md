@@ -157,12 +157,15 @@ pi.registerMcpServer("youtrack", {
 
 ## 验证状态
 
-- **已实测**：jiti 解析扩展目录内的相对 `import`，多文件可用；`getAgentDir()` 返回真实的 agent 目录；
-  加载期 `registerMcpServer` 被 pi 接受（`pi -e .` 启动无 extension_error）；配置读写、0600、非法 profile
-  整文件拒绝、URL 拼装、`/youtrack` 全命令面、重注册与指纹去抖、env 覆盖均有桩测覆盖
-  （`tests/behavior.test.mjs`，用 pi 自己那份 jiti，与加载器同一实现）。
-- **仍未验证**：真实 YouTrack 站点。`initialize` 探活契约按官方文档实现，首次真连由用户验证。
-- **已知行为**：重注册后连接是异步的，新工具集可能要下一轮才可见——命令文案已经这么写。
+- **已实测（yt-air-demo.youtrack.cloud / YouTrack MCP 2026.2，2026-11）**：探活返回 23 个工具；真实 pi 会话里
+  拿到恰好三个 `direct` 工具（`mcp__youtrack__search_issues` / `get_issue` / `get_current_user`），
+  其余经 `tool_search`；只读模式下列表不含写工具；`/youtrack write on` 后写工具出现，并在 `PYP` 项目实建 issue（PYP-1）。
+- **已实测（本地）**：jiti 解析扩展目录内的相对 `import`，多文件可用；`getAgentDir()` 返回真实的 agent 目录；
+  加载期 `registerMcpServer` 被 pi 接受；配置读写、0600、非法 profile 整文件拒绝、URL 拼装、`/youtrack`
+  全命令面、重注册与指纹去抖、env 覆盖均有桩测覆盖（`tests/behavior.test.mjs`，用 pi 自己那份 jiti，
+  与加载器同一实现）。
+- **已知时序**：注册后的连接是异步的，`/youtrack setup` 保存完立刻跑 `/youtrack status` 可能读到尚未连上的瞬间
+  （显示 0 个工具）——这不是故障，下一轮或再次 status 即正常。命令文案已如此说明。
 - **已知限制**：`?readOnlyTools=true` 会一并过滤没有 read-only 标注的自定义 MCP 工具（README 已写）。
 
 ## 包与发布
