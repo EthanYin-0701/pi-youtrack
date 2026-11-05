@@ -52,27 +52,32 @@ pi's tool pipeline (`create_issue`, `create_draft_issue`, `create_article`). Ins
 a card:
 
 ```
-Create issue
-Project: PYP
-Summary: Login times out
+──────────────────────────────────────────────────────────────
+ Create issue in PYP?
+ Login times out · body 120 characters
 
-› Create issue
-  Edit Type — Task
-  Edit Priority — Major
-  Edit Assignee — unset
-  Edit Subsystem — unset
-  Cancel
+ › ● Create issue
+     Type Task · Priority Major · Assignee unset · Subsystem unset
+   ○ Edit Type — Task
+     Pick from the values this project accepts
+   ○ Edit Priority — Major
+     Pick from the values this project accepts
+   ○ Edit Assignee — unset
+     YouTrack login, for example john.doe
+   ○ Edit Subsystem — unset
+     Free text; leave empty to unset
 
-↑↓ move · Enter select · Esc cancel
+ ↑↓ move & select · Enter select · Esc cancel
+──────────────────────────────────────────────────────────────
 ```
 
-`Edit Type` and `Edit Priority` list the values the project actually accepts (the extension reads
-`get_issue_fields_schema` once per project and caches it); `Assignee` and `Subsystem` take free text.
-Whatever you pick is written into the call in place — no cancel-and-retry, no second round trip through the
-model. Cancel blocks the call and tells the agent to go back and ask.
+`Edit Type` and `Edit Priority` open the project's real values (the extension reads
+`get_issue_fields_schema` once per project and caches it) in the same card; `Assignee` and `Subsystem` take
+free text inline. Esc backs out one level, and Esc on the top level cancels. Whatever you pick is written into
+the call in place — no cancel-and-retry, no second round trip through the model.
 
-Hosts that cannot draw custom components (RPC, an IDE sidebar) fall back to a select dialog with the same
-choices. A session with no UI at all (`pi -p`) is never blocked.
+Hosts that cannot draw custom components (RPC, an IDE sidebar) run the same flow through select dialogs. A
+session with no UI at all (`pi -p`) is never blocked.
 
 Only creation is gated. Updates, comments, tags, links, and work items run without a prompt.
 

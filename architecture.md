@@ -38,7 +38,8 @@ tool_search、权限钩子，以及工具名 `mcp__youtrack__*` 的生成。
 | 工具暴露 | 服务器 `deferred` + 三个 `toolExposure: direct` | `deferred` 让 tool_search 自动激活、其余工具不占 prompt；`search_issues`/`get_issue`/`get_current_user` 是每次对话的入口，直连 |
 | 切换/开写 | 用新 config **重注册同名** server | pi 文档与实现都保证：同名且配置不同 ⇒ 丢弃旧条目、`hideTools`、关连接、连新的。不需要 `unregister` 再 `register` 的竞态 |
 | 写操作确认 | `tool_call` 钩子拦三个 `create_*` | 模型可以不遵守 skill，钩子在 pi 的工具管线里绕不过去；非交互模式（无 UI）放行，否则脚本会挂 |
-| 确认交互 | `ui.custom` 卡片，画不了就退 `ui.select` | 终端里能上下选、原地改字段；RPC 宿主画不了自定义组件（返回 `undefined`）时自动降级，不是报错 |
+| 确认交互 | `ui.custom` 卡片，画不了就退 `ui.select` | 终端里能上下选、**卡内展开**枚举、自由文本用内联 `Editor`；RPC 宿主画不了自定义组件（返回 `undefined`）时自动降级，不是报错 |
+| 卡片的层级 | 一级动作 → 二级枚举 → 内联编辑器，`Esc` 逐级返回 | 弹第二个对话框就又变回“确认完再问一遍”；同一张卡里 `Esc` 只退一层，顶层才取消 |
 | 字段候选值 | 扩展自己调一次 `get_issue_fields_schema`，按站点+项目缓存 30 分钟 | 枚举是项目定的，硬编码会错；只在用户真要改 Type/Priority 时才拉，建单流程不为它多付一次往返 |
 | skill 触发 | frontmatter `disable-model-invocation: true` | 只在 `/skill:youtrack` 显式调用时加载，普通对话不自动命中（用户的要求） |
 | 令牌校验 | 自己发一次 MCP `initialize` | 复用不了 pi 的连接（连接是异步且不回报失败的）；`initialize` 同时验证「地址是 MCP 端点」和「令牌有效」两件事 |

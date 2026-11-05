@@ -245,18 +245,20 @@ seed({ acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:abcd1234", a
 {
 	const confirm = await load(join(EXT_DIR, "confirm.ts"), dir);
 	const card = await load(join(EXT_DIR, "card.ts"), dir);
+	const theme = { fg: (_color, text) => text, bold: (text) => text };
+	const fakeTui = { requestRender: () => {} };
 
 	check("creates are gated", ["create_issue", "create_draft_issue", "create_article"].every((t) => confirm.shouldConfirm(t)));
 	check("reads and updates are not", !["search_issues", "get_issue", "update_issue", "add_issue_comment"].some((t) => confirm.shouldConfirm(t)));
 
 	// ---- draft plumbing ----
-	const input = {
+	const seeded = {
 		project: "PYP",
 		summary: "Login times out",
 		description: "x".repeat(120),
 		customFields: { Type: "task", Priority: "Major", "Fix versions": ["1.0"] },
 	};
-	const draft = confirm.readDraft(input);
+	const draft = confirm.readDraft(seeded);
 	eq("draft reads the watched fields case-insensitively", draft.fields, {
 		Type: "task",
 		Priority: "Major",
@@ -264,28 +266,8 @@ seed({ acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:abcd1234", a
 		Subsystem: "",
 	});
 
-	const rows = confirm.buildRows("create_issue", draft);
-	eq("card offers create, four edits, cancel", rows.map((r) => r.label), [
-		"Create issue",
-		"Edit Type",
-		"Edit Priority",
-		"Edit Assignee",
-		"Edit Subsystem",
-		"Cancel",
-	]);
-	eq("rows show the current values", rows.slice(1, 5).map((r) => r.hint), ["task", "Major", "unset", "unset"]);
-	eq("articles have nothing to edit", confirm.buildRows("create_article", draft).map((r) => r.label), [
-		"Create article",
-		"Cancel",
-	]);
-
-	const head = confirm.describeDraft("create_issue", draft);
-	eq("card title names the kind", head.title, "Create issue");
-	check("header has project, summary, body size", head.header.join("|") === "Project: PYP|Summary: Login times out|Body: 120 characters", head.header.join("|"));
-
-	// ---- the loop, driven through the dialog fallback ----
-	const theme = { fg: (_color, text) => text, bold: (text) => text };
-	function cardCtx({ picks = [], custom = "unsupported", hasUI = true, schema } = {}) {
+	// ---- the dialog fallback ----
+	function cardCtx({ picks = [], custom = "unsupported", hasUI = true } = {}) {
 		const seen = { select: [], input: [] };
 		const ctx = {
 			cwd: "/tmp",
@@ -294,7 +276,7 @@ seed({ acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:abcd1234", a
 				custom: async () => (custom === "unsupported" ? undefined : custom),
 				select: async (title, options) => {
 					seen.select.push({ title, options });
-					// Pick by name the way a user would: rows carry a " — hint" suffix, so match by prefix.
+					// Pick by name the way a user would: rows carry a " — value" suffix.
 					const wanted = picks.shift();
 					return options.find((option) => option === wanted || option.startsWith(wanted));
 				},
@@ -305,51 +287,39 @@ seed({ acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:abcd1234", a
 				notify: () => {},
 			},
 		};
-		return { ctx, seen, schema };
+		return { ctx, seen };
 	}
 
-	// create as drafted, no edits
 	{
 		const { ctx } = cardCtx({ picks: ["Create issue"] });
 		const call = { project: "PYP", summary: "s", customFields: { Type: "Task", "Fix versions": ["1.0"] } };
-		const result = await confirm.confirmCreate("create_issue", call, { ctx });
-		eq("create passes", result, { ok: true });
+		eq("create passes", await confirm.confirmCreate("create_issue", call, { ctx }), { ok: true });
 		eq("untouched fields survive", call.customFields, { Type: "Task", "Fix versions": ["1.0"] });
 	}
-
-	// cancel blocks and writes nothing
 	{
-		const { ctx } = cardCtx({ picks: ["Cancel"] });
+		const { ctx } = cardCtx({ picks: [] });
 		const call = { project: "PYP", summary: "s" };
 		const result = await confirm.confirmCreate("create_issue", call, { ctx });
-		eq("cancel blocks", result.ok, false);
-		eq("cancel explains the next step", result.reason, confirm.REFUSAL_REASON);
-		eq("cancel leaves the call alone", call.customFields, undefined);
+		eq("backing out blocks", result.ok, false);
+		eq("backing out explains the next step", result.reason, confirm.REFUSAL_REASON);
+		eq("backing out leaves the call alone", call.customFields, undefined);
 	}
-
-	// edit Type from the project schema, then create
 	{
 		const { ctx, seen } = cardCtx({ picks: ["Edit Type", "Bug", "Create issue"] });
 		const call = { project: "PYP", summary: "s" };
-		const result = await confirm.confirmCreate("create_issue", call, {
+		eq("edit then create passes", await confirm.confirmCreate("create_issue", call, {
 			ctx,
 			lookupSchema: async () => ({ Type: { enum: ["Bug", "Task"] } }),
-		});
-		eq("edit then create passes", result, { ok: true });
+		}), { ok: true });
 		eq("the chosen value lands in the call", call.customFields, { Type: "Bug" });
-		eq("the field dialog offers the schema values", seen.select[1].options, ["Bug", "Task", "(leave empty)"]);
+		eq("the value dialog offers the schema values", seen.select[1].options, ["Bug", "Task", "(leave empty)"]);
 	}
-
-	// a free-text field takes an input instead of a select
 	{
-		const { ctx, seen } = cardCtx({ picks: ["Edit Assignee", "john.doe", "Create issue"] });
+		const { ctx } = cardCtx({ picks: ["Edit Assignee", "john.doe", "Create issue"] });
 		const call = { project: "PYP", summary: "s" };
 		await confirm.confirmCreate("create_issue", call, { ctx, lookupSchema: async () => ({}) });
-		eq("assignee goes through input", call.customFields, { Assignee: "john.doe" });
-		eq("no select for a free-text field", seen.select.length, 2);
+		eq("a free-text field goes through input", call.customFields, { Assignee: "john.doe" });
 	}
-
-	// clearing a field removes it
 	{
 		const { ctx } = cardCtx({ picks: ["Edit Priority", "(leave empty)", "Create issue"] });
 		const call = { project: "PYP", summary: "s", customFields: { Priority: "Major" } };
@@ -359,8 +329,6 @@ seed({ acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:abcd1234", a
 		});
 		eq("leaving a field empty drops it", call.customFields, undefined);
 	}
-
-	// host cannot draw a card, and no UI at all
 	{
 		const { ctx } = cardCtx({ custom: null });
 		eq("custom returning null blocks", (await confirm.confirmCreate("create_issue", {}, { ctx })).ok, false);
@@ -368,31 +336,77 @@ seed({ acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:abcd1234", a
 		eq("no UI lets the call through", await confirm.confirmCreate("create_issue", {}, { ctx: silent.ctx }), { ok: true });
 	}
 
-	// ---- the terminal menu itself ----
+	// ---- the terminal card ----
+	function makeCard(overrides = {}) {
+		const request = {
+			ctx: { hasUI: true, ui: {} },
+			question: "Create issue in PYP?",
+			summary: ["Login times out · body 120 characters"],
+			kind: "issue",
+			editable: true,
+			fields: { Type: "Task", Priority: "Major", Assignee: "", Subsystem: "" },
+			loadValues: async () => ["Bug", "Task"],
+			...overrides,
+		};
+		const state = { settled: undefined };
+		const view = new card.ConfirmCard(request, fakeTui, theme, (value) => {
+			state.settled = value;
+		});
+		return { request, view, state };
+	}
+
 	{
-		const menuRows = [
-			{ action: { kind: "create" }, label: "Create issue" },
-			{ action: { kind: "cancel" }, label: "Cancel" },
-		];
-		let settled;
-		const menu = new card.ConfirmMenu("Create issue", ["Project: PYP"], menuRows, theme, (v) => {
-			settled = v;
-		});
-		const lines = menu.render(80);
-		check("menu renders the title", lines.some((l) => l.includes("Create issue")), lines.join("\n"));
-		check("menu renders the header", lines.some((l) => l.includes("Project: PYP")), lines.join("\n"));
-		check("menu renders every row", menuRows.every((r) => lines.some((l) => l.includes(r.label))), lines.join("\n"));
+		const { view } = makeCard();
+		const lines = view.render(80);
+		const text = lines.join("\n");
+		check("card draws rules", lines.some((line) => line.startsWith("────")), text);
+		check("card asks the question", text.includes("Create issue in PYP?"), text);
+		check("card shows the summary", text.includes("body 120 characters"), text);
+		check("card marks the focused row", lines.some((line) => line.includes("› ● Create issue")), text);
+		check("card shows field values", text.includes("Type Task") && text.includes("Priority Major"), text);
+		check("card lists every editable field", ["Edit Type", "Edit Priority", "Edit Assignee", "Edit Subsystem"].every((label) => text.includes(label)), text);
+		check("card has no Cancel row", !text.includes("Cancel"), text);
+		check("card explains the keys", text.includes("Esc cancel"), text);
+	}
 
-		menu.handleInput("\u001b[B");
-		menu.handleInput("\r");
-		eq("down then enter picks the second row", settled, { kind: "cancel" });
+	{
+		const { view, state } = makeCard();
+		view.handleInput("\r");
+		eq("Enter on Create confirms", state.settled, { kind: "create" });
+	}
 
-		let escaped;
-		const menu2 = new card.ConfirmMenu("t", [], menuRows, theme, (v) => {
-			escaped = v;
-		});
-		menu2.handleInput("\u001b");
-		eq("escape backs out", escaped, null);
+	{
+		const { view, state } = makeCard();
+		view.handleInput("\u001b");
+		eq("Esc at the top level cancels", state.settled, null);
+	}
+
+	{
+		const { view, request, state } = makeCard();
+		view.handleInput("\u001b[B"); // down -> Edit Type
+		view.handleInput("\r"); // open its values
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const valuesText = view.render(80).join("\n");
+		check("editing opens the allowed values in the same card", valuesText.includes("Bug") && valuesText.includes("Task"), valuesText);
+		check("the empty choice is offered", valuesText.includes("(leave empty)"), valuesText);
+		eq("picking a value does not settle yet", state.settled, undefined);
+
+		view.handleInput("\r"); // take the first value, "Bug"
+		eq("the picked value lands in the working copy", request.fields.Type, "Bug");
+		eq("after picking, the card is back on the actions", state.settled, undefined);
+
+		view.handleInput("\r");
+		eq("Enter now confirms", state.settled, { kind: "create" });
+	}
+
+	{
+		const { view, state } = makeCard();
+		view.handleInput("\u001b[B");
+		view.handleInput("\r");
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		view.handleInput("\u001b"); // Esc leaves the value list
+		eq("Esc in the value list goes back, not cancel", state.settled, undefined);
+		check("the actions are shown again", view.render(80).join("\n").includes("Create issue"), "");
 	}
 
 	// ---- the gate registered on the extension ----
@@ -400,14 +414,12 @@ seed({ acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:abcd1234", a
 		const h = harness();
 		await (await loadFactory(dir))(h.api);
 		const gate = h.handlers.get("tool_call");
+		const blockCtx = { ...h.ctx, ui: { ...h.ctx.ui, custom: async () => null } };
 		check("tool_call handler registered", typeof gate === "function");
-		eq("read tools pass untouched", await gate({ toolName: "mcp__youtrack__search_issues", input: {} }, { ...h.ctx, ui: { ...h.ctx.ui, custom: async () => null } }), undefined);
-		eq("other servers are ignored", await gate({ toolName: "mcp__other__create_issue", input: {} }, { ...h.ctx, ui: { ...h.ctx.ui, custom: async () => null } }), undefined);
-		const blocked = await gate(
-			{ toolName: "mcp__youtrack__create_issue", input: { project: "PYP", summary: "s" } },
-			{ ...h.ctx, ui: { ...h.ctx.ui, custom: async () => null } },
-		);
-		eq("declining at the card blocks the call", blocked?.block, true);
+		eq("read tools pass untouched", await gate({ toolName: "mcp__youtrack__search_issues", input: {} }, blockCtx), undefined);
+		eq("other servers are ignored", await gate({ toolName: "mcp__other__create_issue", input: {} }, blockCtx), undefined);
+		const blocked = await gate({ toolName: "mcp__youtrack__create_issue", input: { project: "PYP", summary: "s" } }, blockCtx);
+		eq("cancelling at the card blocks the call", blocked?.block, true);
 		eq("the block carries the refusal reason", blocked?.reason, confirm.REFUSAL_REASON);
 	}
 }

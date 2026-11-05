@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type CardRow, showCard } from "./card.ts";
+import { showCard, WATCHED_FIELDS } from "./card.ts";
 import type { ProjectSchema } from "./fields.ts";
 
 /** Tools that ask the user before they run. Creating things is where a wrong field is both costly and easy to miss. */
@@ -8,11 +8,6 @@ const CONFIRM_TOOLS: Record<string, string> = {
 	create_draft_issue: "draft issue",
 	create_article: "article",
 };
-
-/** The four fields a user actually wants a say in. Everything else follows from the project schema. */
-const WATCHED_FIELDS = ["Type", "Priority", "Assignee", "Subsystem"];
-
-const LEAVE_EMPTY = "(leave empty)";
 
 export const REFUSAL_REASON =
 	"The user cancelled this write. Nothing was created. Ask what to change — summary or the Type/Priority/Assignee/Subsystem fields — and call the tool again once they agree.";
@@ -86,64 +81,17 @@ export function applyDraft(input: unknown, draft: Draft): void {
 	else delete args.customFields;
 }
 
-export function buildRows(serverToolName: string, draft: Draft): CardRow[] {
-	const kind = CONFIRM_TOOLS[serverToolName] ?? "item";
-	const rows: CardRow[] = [{ action: { kind: "create" }, label: `Create ${kind}` }];
-	// A draft issue or an article has no custom fields to offer.
-	if (serverToolName === "create_issue") {
-		for (const field of WATCHED_FIELDS) {
-			const value = draft.fields[field] ?? "";
-			rows.push({
-				action: { kind: "edit", field },
-				label: `Edit ${field}`,
-				hint: value === "" ? "unset" : value,
-			});
-		}
-	}
-	rows.push({ action: { kind: "cancel" }, label: "Cancel" });
-	return rows;
-}
-
-export function describeDraft(serverToolName: string, draft: Draft): { title: string; header: string[] } {
-	const kind = CONFIRM_TOOLS[serverToolName] ?? "item";
-	const header = [`Project: ${draft.project === "" ? "?" : draft.project}`, `Summary: ${draft.summary === "" ? "(none)" : draft.summary}`];
-	if (draft.body) header.push(`Body: ${draft.body.length} characters`);
-	return { title: `Create ${kind}`, header };
-}
-
 export interface ConfirmDeps {
 	ctx: ExtensionContext;
 	/** Custom-field values for the project, so the card can offer what YouTrack accepts. */
 	lookupSchema?: (project: string) => Promise<ProjectSchema | undefined>;
 }
 
-async function editField(draft: Draft, field: string, deps: ConfirmDeps): Promise<void> {
-	const schema = await deps.lookupSchema?.(draft.project).catch(() => undefined);
-	const values = schema?.[field]?.enum;
-	const options = deps.ctx.signal ? { signal: deps.ctx.signal } : {};
-
-	if (values && values.length > 0) {
-		const choice = await deps.ctx.ui.select(
-			`${field} for ${draft.project}`,
-			[...values, LEAVE_EMPTY],
-			options,
-		);
-		if (choice === undefined) return;
-		draft.fields[field] = choice === LEAVE_EMPTY ? "" : choice;
-		return;
-	}
-
-	const current = draft.fields[field] ?? "";
-	const answer = await deps.ctx.ui.input(`${field} for ${draft.project} (empty to unset)`, current || undefined);
-	if (answer === undefined) return;
-	draft.fields[field] = answer.trim();
-}
-
 export type ConfirmResult = { ok: true } | { ok: false; reason: string };
 
 /**
- * Show the card until the user either creates or cancels, applying any field edits to the call in place.
- * A host with no UI lets the call through: blocking there would hang a scripted session.
+ * Ask before creating, letting the user fix the fields in place. A host with no UI lets the call through:
+ * blocking there would hang a scripted session.
  */
 export async function confirmCreate(
 	serverToolName: string,
@@ -152,17 +100,34 @@ export async function confirmCreate(
 ): Promise<ConfirmResult> {
 	if (!deps.ctx.hasUI) return { ok: true };
 
+	const kind = CONFIRM_TOOLS[serverToolName] ?? "item";
 	const draft = readDraft(input);
-	for (;;) {
-		const { title, header } = describeDraft(serverToolName, draft);
-		const outcome = await showCard({ ctx: deps.ctx, title, header, rows: buildRows(serverToolName, draft) });
+	// Only a full issue carries custom fields; a draft or an article has nothing to edit.
+	const editable = serverToolName === "create_issue";
+	const summary = editable
+		? [draft.body ? `${draft.summary} · body ${draft.body.length} characters` : draft.summary]
+		: [draft.summary];
 
-		if (outcome === undefined) return { ok: true };
-		if (outcome === null || outcome.kind === "cancel") return { ok: false, reason: REFUSAL_REASON };
-		if (outcome.kind === "create") {
-			applyDraft(input, draft);
-			return { ok: true };
-		}
-		await editField(draft, outcome.field, deps);
-	}
+	const lookup = deps.lookupSchema;
+	const outcome = await showCard({
+		ctx: deps.ctx,
+		question: `Create ${kind} in ${draft.project || "?"}?`,
+		summary: summary.filter((line) => line !== ""),
+		kind,
+		editable,
+		fields: draft.fields,
+		...(lookup
+			? {
+					loadValues: async (field: string) => {
+						const schema = await lookup(draft.project);
+						return schema?.[field]?.enum;
+					},
+				}
+			: {}),
+	});
+
+	if (outcome === undefined) return { ok: true };
+	if (outcome === null) return { ok: false, reason: REFUSAL_REASON };
+	applyDraft(input, draft);
+	return { ok: true };
 }
