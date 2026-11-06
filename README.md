@@ -17,9 +17,9 @@ Then, inside pi:
 Answer three prompts — base URL, site name, permanent token — and the agent can search, read, and (when you
 allow it) update your issues.
 
-> **Best in ThinkRail.** The bundled `youtrack` skill is nicest there: ThinkRail renders its confirmation
-> questionnaire as an inline interactive card in the chat, instead of a terminal menu. The skill behaves
-> the same everywhere — invoke it with `/skill:youtrack` — only the card differs.
+> **Best in [ThinkRail](https://thinkrail.ai/).** The bundled `youtrack` skill is nicest there: ThinkRail
+> renders its confirmation questionnaire as an inline interactive card in the chat, instead of a terminal
+> menu. The skill behaves the same everywhere — invoke it with `/skill:youtrack` — only the card differs.
 
 ## Why this package
 
