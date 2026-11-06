@@ -47,9 +47,18 @@ start.
 
 ## Confirming before it writes
 
-Creating things is the one place a wrong field is both costly and easy to miss, so the extension gates it in
-pi's tool pipeline (`create_issue`, `create_draft_issue`, `create_article`). Instead of a yes/no prompt you get
-a card:
+Creating an issue asks the user first, wherever pi runs. Two paths, one contract.
+
+**In ThinkRail — or any host that provides the `ask_user_question` tool — the questionnaire card is the
+confirmation.** The bundled skill makes the agent call `ask_user_question` with four questions — Priority,
+Type, Assignee, Subsystem — the summary sitting in the first question's text and a recommended value first in
+every list. The host renders it as its familiar interactive card, the answers arrive as the next message, and
+the agent fills `customFields` from them. An agent that skips the questionnaire and calls `create_issue`
+anyway gets the call blocked with an instruction to ask first — the gate counts a questionnaire from the
+current or the previous turn, because that is when the answers land. Drafts and articles have no fields to
+confirm, so they are not gated this way.
+
+**In a plain terminal without that tool**, the extension draws its own card before the call runs:
 
 ```
 ──────────────────────────────────────────────────────────────
@@ -71,19 +80,12 @@ a card:
 ──────────────────────────────────────────────────────────────
 ```
 
-`Edit Type` and `Edit Priority` open the project's real values (the extension reads
-`get_issue_fields_schema` once per project and caches it) in the same card; `Assignee` and `Subsystem` take
-free text inline. Esc backs out one level, and Esc on the top level cancels. Whatever you pick is written into
-the call in place — no cancel-and-retry, no second round trip through the model.
+`Edit Type` and `Edit Priority` open the project's real values (read from `get_issue_fields_schema` once per
+project and cached) in the same card; `Assignee` and `Subsystem` edit inline. Esc backs out one level, and Esc
+on the top level cancels. Whatever you pick is written into the call in place.
 
-Hosts that cannot draw custom components (RPC, an IDE sidebar) run the same flow through select dialogs. A
-session with no UI at all (`pi -p`) is never blocked.
-
-Only creation is gated. Updates, comments, tags, links, and work items run without a prompt.
-
-The bundled skill describes the same order as a procedure — check access, resolve the project, read the field
-schema, post a field draft and wait, then create — and it is loaded only through `/skill:youtrack`, never
-automatically.
+Sessions without any UI (`pi -p`) are never blocked. Updates, comments, tags, links, and work items run
+without a prompt.
 
 ## Requirements
 

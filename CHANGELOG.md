@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Confirmations ride the host's `ask_user_question` card where one exists: the skill sends four questions
+  (Priority / Type / Assignee / Subsystem, summary in the first question), and a `create_issue` that skips the
+  questionnaire is blocked, counting the current or the previous turn. Without that tool, a terminal gets the
+  extension's own card with in-place field editing; scripted sessions are never blocked.
+
 - Bundled `youtrack` skill: the query section now matches what the server actually accepts. An unbraced
   multi-word value (`State: In Progress`) and three plausible-looking forms — multi-value braces, explicit
   `or`, and excluding a custom-field value — all return an empty page with no error; the skill names the

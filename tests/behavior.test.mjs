@@ -32,7 +32,7 @@ async function loadFactory(dir) {
 	return mod.default;
 }
 
-function harness() {
+function harness(tools = []) {
 	const commands = new Map();
 	const handlers = new Map();
 	const registrations = [];
@@ -42,7 +42,7 @@ function harness() {
 		registerCommand: (name, opts) => commands.set(name, opts),
 		registerMcpServer: (name, config) => registrations.push({ name, url: config.url, headers: config.headers }),
 		unregisterMcpServer: (name) => registrations.push({ name, url: null }),
-		getAllTools: () => [],
+		getAllTools: () => tools,
 		sendMessage: (message) => messages.push(message.content),
 		on: (event, handler) => handlers.set(event, handler),
 	};
@@ -421,6 +421,32 @@ seed({ acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:abcd1234", a
 		const blocked = await gate({ toolName: "mcp__youtrack__create_issue", input: { project: "PYP", summary: "s" } }, blockCtx);
 		eq("cancelling at the card blocks the call", blocked?.block, true);
 		eq("the block carries the refusal reason", blocked?.reason, confirm.REFUSAL_REASON);
+	}
+
+	// ---- hosts with the ask_user_question card ----
+	{
+		const h = harness([{ name: "ask_user_question" }]);
+		await (await loadFactory(dir))(h.api);
+		const gate = h.handlers.get("tool_call");
+		const turnStart = h.handlers.get("turn_start");
+		const blockCtx = { ...h.ctx, ui: { ...h.ctx.ui, custom: async () => null } };
+
+		const blocked = await gate({ toolName: "mcp__youtrack__create_issue", input: { project: "PYP" } }, blockCtx);
+		eq("ask host: create without a questionnaire is blocked", blocked?.block, true);
+		eq("ask host: the reason points at the questionnaire", blocked?.reason, confirm.ASK_FIRST_REASON);
+
+		eq("ask host: drafts have no fields and pass", await gate({ toolName: "mcp__youtrack__create_draft_issue", input: {} }, blockCtx), undefined);
+		eq("ask host: articles pass", await gate({ toolName: "mcp__youtrack__create_article", input: {} }, blockCtx), undefined);
+
+		await gate({ toolName: "ask_user_question", input: {} }, h.ctx);
+		eq("ask host: a same-turn questionnaire unblocks", await gate({ toolName: "mcp__youtrack__create_issue", input: { project: "PYP" } }, blockCtx), undefined);
+
+		await turnStart({ type: "turn_start" }, h.ctx);
+		eq("ask host: the previous turn's questionnaire counts", await gate({ toolName: "mcp__youtrack__create_issue", input: { project: "PYP" } }, blockCtx), undefined);
+
+		await turnStart({ type: "turn_start" }, h.ctx);
+		const stale = await gate({ toolName: "mcp__youtrack__create_issue", input: { project: "PYP" } }, blockCtx);
+		eq("ask host: a stale questionnaire blocks again", stale?.block, true);
 	}
 }
 

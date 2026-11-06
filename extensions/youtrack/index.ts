@@ -11,7 +11,7 @@ import {
 	type YouTrackConfig,
 } from "./config.ts";
 import { probeEndpoint } from "./probe.ts";
-import { confirmCreate, shouldConfirm } from "./confirm.ts";
+import { ASK_FIRST_REASON, confirmCreate, shouldConfirm } from "./confirm.ts";
 import { projectSchema } from "./fields.ts";
 import { syncRegistration, SERVER_NAME, type Desired } from "./register.ts";
 import {
@@ -34,6 +34,11 @@ export default async function youtrack(pi: ExtensionAPI) {
 	let writeEnabled = false;
 	let loaded: LoadResult = loadConfig();
 	let notice: string | undefined;
+	// Whether an ask_user_question questionnaire ran in this or the previous turn. The answer arrives as the
+	// next turn, so a create there must count the turn before it.
+	let askThisTurn = false;
+	let askLastTurn = false;
+	const askToolAvailable = () => pi.getAllTools().some((tool) => tool.name === "ask_user_question");
 
 	function desiredCurrent(): Desired | undefined {
 		loaded = loadConfig();
@@ -87,14 +92,34 @@ export default async function youtrack(pi: ExtensionAPI) {
 		if (notice) ctx.ui.notify(notice, "warning");
 	});
 
+	pi.on("turn_start", async () => {
+		askLastTurn = askThisTurn;
+		askThisTurn = false;
+	});
+
 	// MCP calls run through pi's tool pipeline, so this covers what the agent writes however it decided
 	// to call the tool. Only creation is gated: a wrong field is costly there and easy to miss.
 	pi.on("tool_call", async (event, ctx) => {
+		if (event.toolName === "ask_user_question") {
+			askThisTurn = true;
+			return;
+		}
 		const prefix = `mcp__${SERVER_NAME}__`;
 		if (!event.toolName.startsWith(prefix)) return;
 		const tool = event.toolName.slice(prefix.length);
 		if (!shouldConfirm(tool)) return;
 
+		// In a host with the interactive ask_user_question card, the questionnaire IS the confirmation: a
+		// create_issue must follow one, but nothing else is gated — drafts and articles have no fields.
+		if (askToolAvailable()) {
+			if (tool === "create_issue" && !askThisTurn && !askLastTurn) {
+				return { block: true, reason: ASK_FIRST_REASON };
+			}
+			return;
+		}
+
+		// No ask tool: the extension's own card (terminal, or dialogs where that is all a host can draw)
+		// is the only confirmation.
 		const outcome = await confirmCreate(tool, event.input, {
 			ctx,
 			lookupSchema: (project: string) => {

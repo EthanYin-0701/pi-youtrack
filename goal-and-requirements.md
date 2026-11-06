@@ -107,10 +107,10 @@ pi 今天就能连 YouTrack：`pi mcp add --url https://acme.youtrack.cloud/mcp 
 7. **附带 skill**：一个 `youtrack` skill，以固定流程开头（查权限 → 定项目 → 读 schema → 贴字段草稿等回复
    → 调用 → 被拦则回上一步），再写清楚查询语法、`customFields` 的取值来源、草稿 issue 与正式 issue 的区别、
    评论/附件的 `target` 约定。只在 `/skill:youtrack` 显式调用时加载。
-8. **新建前确认**：`create_issue` / `create_draft_issue` / `create_article` 执行前弹一张带选项的卡——可原地
-   改 Type / Priority（列项目真实枚举）/ Assignee / Subsystem，或创建、取消。改完直接写回这次调用，不需要
-   取消重来；取消则拦下调用并让模型回去问。画不了自定义组件的宿主退化成 select 对话框；无 UI 的会话不拦。
-   只拦新建类。
+8. **新建前确认**：在提供 `ask_user_question` 工具的主机（如 ThinkRail）里，skill 让 agent 建单前先发四问
+   问卷（Priority / Type / Assignee / Subsystem，题干带 summary），主机渲染成内联选项卡，答案回填
+   `customFields`；跳过问卷直接建单会被扩展硬拦（记本回合与上一回合的问卷）。纯终端没有该工具时，扩展在
+   执行前弹自己的确认卡（卡内可改字段、列项目真实枚举）；无 UI 的会话不拦。只拦新建类。
 9. **发布链路**：npm 包声明 `pi-package` keyword，推 `v*` tag 由 GitHub Actions 发布，
    仓库带 MIT LICENSE 与 CHANGELOG。
 

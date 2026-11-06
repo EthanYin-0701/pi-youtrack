@@ -12,6 +12,10 @@ const CONFIRM_TOOLS: Record<string, string> = {
 export const REFUSAL_REASON =
 	"The user cancelled this write. Nothing was created. Ask what to change — summary or the Type/Priority/Assignee/Subsystem fields — and call the tool again once they agree.";
 
+/** In hosts that provide the `ask_user_question` card, a create must follow a confirmed questionnaire. */
+export const ASK_FIRST_REASON =
+	"The user has not confirmed the fields yet. Call ask_user_question with the Priority / Type / Assignee / Subsystem draft, wait for the answer, and only then call create_issue. Nothing was created.";
+
 export function shouldConfirm(serverToolName: string): boolean {
 	return Object.hasOwn(CONFIRM_TOOLS, serverToolName);
 }

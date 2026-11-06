@@ -37,8 +37,9 @@ tool_search、权限钩子，以及工具名 `mcp__youtrack__*` 的生成。
 | 默认只读的实现层 | 注册 URL 加 `?readOnlyTools=true` | 在**服务端**过滤，写工具根本不进工具表——不是"调用被拒"。比客户端权限门更硬，也不需要维护工具清单 |
 | 工具暴露 | 服务器 `deferred` + 三个 `toolExposure: direct` | `deferred` 让 tool_search 自动激活、其余工具不占 prompt；`search_issues`/`get_issue`/`get_current_user` 是每次对话的入口，直连 |
 | 切换/开写 | 用新 config **重注册同名** server | pi 文档与实现都保证：同名且配置不同 ⇒ 丢弃旧条目、`hideTools`、关连接、连新的。不需要 `unregister` 再 `register` 的竞态 |
-| 写操作确认 | `tool_call` 钩子拦三个 `create_*` | 模型可以不遵守 skill，钩子在 pi 的工具管线里绕不过去；非交互模式（无 UI）放行，否则脚本会挂 |
-| 确认交互 | `ui.custom` 卡片，画不了就退 `ui.select` | 终端里能上下选、**卡内展开**枚举、自由文本用内联 `Editor`；RPC 宿主画不了自定义组件（返回 `undefined`）时自动降级，不是报错 |
+| 写操作确认 | 两条路径：宿主有 `ask_user_question` 工具 → **问卷卡即确认**，`create_issue` 必须跟在一个问卷回合之后，否则 block；没有该工具 → 扩展自己的卡片 | ThinkRail 的 web 侧按工具名给 `ask_user_question` 渲染内联卡；`ctx.ui.custom` 走 ExtUiDialog 模态弹窗，永远画不成聊天流里的卡 |
+| 硬拦的回合追踪 | `turn_start` 翻页：本回合或上一回合问过问卷才放行 | 答案作为 `ask-user-answers` 消息触发新回合，建单发生在问卷的**下一回合**，所以记上一回合即可，不回放 transcript；draft/article 没有字段可确认，不拦 |
+| 确认交互（无 ask 工具时） | `ui.custom` 卡片，画不了就退 `ui.select` | 终端里能上下选、**卡内展开**枚举、自由文本用内联 `Editor`；画不了自定义组件的主机退化成 select 对话框，不是报错 |
 | 卡片的层级 | 一级动作 → 二级枚举 → 内联编辑器，`Esc` 逐级返回 | 弹第二个对话框就又变回“确认完再问一遍”；同一张卡里 `Esc` 只退一层，顶层才取消 |
 | 字段候选值 | 扩展自己调一次 `get_issue_fields_schema`，按站点+项目缓存 30 分钟 | 枚举是项目定的，硬编码会错；只在用户真要改 Type/Priority 时才拉，建单流程不为它多付一次往返 |
 | skill 触发 | frontmatter `disable-model-invocation: true` | 只在 `/skill:youtrack` 显式调用时加载，普通对话不自动命中（用户的要求） |
@@ -152,8 +153,9 @@ pi.registerMcpServer("youtrack", {
 ## Skill 契约
 
 `skills/youtrack/SKILL.md` 以一段**固定流程（Procedure）**开头，后面才是知识库。流程是六步：
-检查写权限 → `find_projects` 定项目 → `get_issue_fields_schema` 读 schema → **贴字段草稿并等用户回复**
-→ 调用工具并原样引用返回的 id/URL → 被确认框拦下时回到第 4 步而不是原样重试。
+检查写权限 → `find_projects` 定项目 → `get_issue_fields_schema` 读 schema → **有 `ask_user_question` 工具就发
+四问问卷卡（Priority / Type / Assignee / Subsystem，第 1 题题干带 summary、建议值挂 (Recommended)）等答案，
+没有该工具就直接调 create 让扩展弹卡** → 调用工具并原样引用返回的 id/URL → 被拦下时回到第 4 步而不是原样重试。
 
 流程之外必须覆盖的知识：
 

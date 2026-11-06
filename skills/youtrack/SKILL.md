@@ -24,15 +24,27 @@ Follow these steps in order. They exist because each one has been skipped before
 2. **Resolve the project.** `find_projects` for the key. Never invent a key, and never infer one from a
    summary or a URL.
 3. **Read the schema.** `get_issue_fields_schema` for that project, every time before creating.
-4. **Post the field draft, then wait.** Before anything that creates an issue, show the user:
+4. **Ask on the card, then wait.** Before anything that creates an issue, the user must confirm the fields:
 
-   - **Summary** — what you intend to write
-   - **Type / Priority / Assignee / Subsystem** — a proposed value, or "leave empty"
-
-   Then stop and wait for their reply. Do not call `create_issue` in the same turn as the draft.
+   - If a tool named `ask_user_question` is available (host-provided): call it — and **nothing else in that
+     response** — with four questions, in order:
+     1. `Priority` — the question text starts with the summary you intend to write, e.g.
+        `For "[test] 确认卡联调": Priority?`; the options are the schema's values, most likely first and
+        labelled `(Recommended)` with a one-line reason.
+     2. `Type` — same shape, values from the schema.
+     3. `Assignee` — first option `Leave unassigned` (mark it `(Recommended)` when you have no strong
+        proposal); the current user's login can be a second option; other people are typed through the
+        automatic Other row.
+     4. `Subsystem` — option `Leave empty (Recommended)`; the question text says a value can be typed
+        through the automatic Other row.
+     Wait for the answers, fill `customFields` from them, and call `create_issue` in a **later turn** — never
+     in the same response as the questionnaire. Calling `create_issue` without the questionnaire gets the
+     call blocked in such hosts.
+   - If no `ask_user_question` tool exists: call the create tool directly — in a terminal the extension shows
+     its own confirmation card before the call runs.
 5. **Create, then report.** Call the tool and quote the returned id and URL exactly as returned.
-6. **If a call comes back blocked by a confirmation,** the user declined it. Return to step 4 with what
-   they said; never retry the same call unchanged.
+6. **If a call comes back blocked,** the user declined it or the questionnaire is missing. Return to step 4
+   with what they said; never retry the same call unchanged.
 
 ## Query syntax
 
