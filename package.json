@@ -1,6 +1,6 @@
 {
 	"name": "pi-youtrack",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "One YouTrack permanent token away from having pi read and write your issues over YouTrack's official MCP server.",
 	"type": "module",
 	"license": "MIT",
