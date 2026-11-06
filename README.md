@@ -17,6 +17,10 @@ Then, inside pi:
 Answer three prompts — base URL, site name, permanent token — and the agent can search, read, and (when you
 allow it) update your issues.
 
+> **Best in ThinkRail.** The bundled `youtrack` skill is nicest there: ThinkRail renders its confirmation
+> questionnaire as an inline interactive card in the chat, instead of a terminal menu. The skill behaves
+> the same everywhere — invoke it with `/skill:youtrack` — only the card differs.
+
 ## Why this package
 
 pi can already reach YouTrack with `pi mcp add --url https://acme.youtrack.cloud/mcp --bearer-token-env-var YOUTRACK_TOKEN`.
@@ -46,6 +50,11 @@ Everything after `/youtrack setup` is optional: the extension registers the acti
 start.
 
 ## Confirming before it writes
+
+> **Use this skill in ThinkRail if you can.** The inline interactive card is rendered by ThinkRail's web
+> chat (it draws the `ask_user_question` tool as a multi-tab questionnaire), which is a friendlier
+> confirmation than a terminal menu or a modal dialog. The skill is the same everywhere — only the card
+> differs.
 
 Creating an issue asks the user first, wherever pi runs. Two paths, one contract.
 
