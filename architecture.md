@@ -167,6 +167,12 @@ pi.registerMcpServer("youtrack", {
    `project` + `summary`；`add_attachment` 用返回的 `createdIssue.id` 作 target。
 4. 一条硬规则：**所有 YouTrack 数据必须来自 `mcp__youtrack__*` 的工具结果**，不许用 bash/curl 直接打
    `/mcp` 端点——这条来自真实事故：agent 曾经绕过 MCP 去直连端点。
+5. 评论：已知链接上追加评论是五步固定流程（查写权限 → `/issue/` 段取 readable id 并经 `get_issue` 确认 →
+   起草 Markdown → `ask_user_question` 两问卡（草稿认可 + visibility：既定跟随 issue 或限定用户/组，经
+   `find_user` / `find_user_groups` 解析进 `permittedUsers` / `permittedGroups`）等答案，**下一回合**才调
+   `add_issue_comment`，返回的 `commentId` 是 `add_attachment` 的 target → 原样引用结果）。无该工具则
+   聊天贴草稿等回复；脚本化会话直接投稿。扩展只 gate create 系（`CONFIRM_TOOLS`），评论的草稿认可纯属
+   skill 自身行为。
 
 ## 安全不变量
 

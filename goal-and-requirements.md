@@ -106,7 +106,7 @@ pi 今天就能连 YouTrack：`pi mcp add --url https://acme.youtrack.cloud/mcp 
    `status` 显示 active 站点、写权限状态、工具数量与连接状态。
 7. **附带 skill**：一个 `youtrack` skill，以固定流程开头（查权限 → 定项目 → 读 schema → 贴字段草稿等回复
    → 调用 → 被拦则回上一步），再写清楚查询语法、`customFields` 的取值来源、草稿 issue 与正式 issue 的区别、
-   评论/附件的 `target` 约定。只在 `/skill:youtrack` 显式调用时加载。
+   评论/附件的 `target` 约定、已知链接加评论的草稿认可 + visibility 流程。只在 `/skill:youtrack` 显式调用时加载。
 8. **新建前确认**：在提供 `ask_user_question` 工具的主机（如 ThinkRail）里，skill 让 agent 建单前先发四问
    问卷（Priority / Type / Assignee / Subsystem，题干带 summary），主机渲染成内联选项卡，答案回填
    `customFields`；跳过问卷直接建单会被扩展硬拦（记本回合与上一回合的问卷）。纯终端没有该工具时，扩展在

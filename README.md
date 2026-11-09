@@ -93,8 +93,10 @@ confirm, so they are not gated this way.
 project and cached) in the same card; `Assignee` and `Subsystem` edit inline. Esc backs out one level, and Esc
 on the top level cancels. Whatever you pick is written into the call in place.
 
-Sessions without any UI (`pi -p`) are never blocked. Updates, comments, tags, links, and work items run
-without a prompt.
+Sessions without any UI (`pi -p`) are never blocked. Updates, tags, links, and work items run without a
+prompt. The bundled skill also asks before a comment: it shows the draft plus a visibility choice and posts
+only after approval (a scripted session with no user posts directly and says so). The extension itself gates
+only creation.
 
 ## Requirements
 
