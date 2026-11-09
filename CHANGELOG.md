@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.1.3]
+
+- The YouTrack skill now covers commenting on issues: resolving a pasted issue link, drafting the
+  comment, confirming it (and its visibility) through the host's ask_user_question card, and posting
+  with `add_issue_comment`.
+
 ## [0.1.2]
 
 - Mark the `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` peer dependencies as optional
