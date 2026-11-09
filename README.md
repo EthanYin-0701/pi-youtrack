@@ -83,7 +83,7 @@ confirm, so they are not gated this way.
    ○ Edit Assignee — unset
      YouTrack login, for example john.doe
    ○ Edit Subsystem — unset
-     Free text; leave empty to unset
+     Leave empty to unset
 
  ↑↓ move & select · Enter select · Esc cancel
 ──────────────────────────────────────────────────────────────

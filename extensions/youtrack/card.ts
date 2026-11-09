@@ -183,7 +183,7 @@ export class ConfirmCard implements Component, Focusable {
 						field === "Assignee"
 							? "YouTrack login, for example john.doe"
 							: field === "Subsystem"
-								? "Free text; leave empty to unset"
+								? "Leave empty to unset"
 								: "Pick from the values this project accepts",
 				});
 			}
