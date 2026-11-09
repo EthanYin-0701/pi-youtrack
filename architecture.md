@@ -44,11 +44,11 @@ tool_search、权限钩子，以及工具名 `mcp__youtrack__*` 的生成。
 | 字段候选值 | 扩展自己调一次 `get_issue_fields_schema`，按站点+项目缓存 30 分钟 | 枚举是项目定的，硬编码会错；只在用户真要改 Type/Priority 时才拉，建单流程不为它多付一次往返 |
 | skill 触发 | frontmatter `disable-model-invocation: true` | 只在 `/skill:youtrack` 显式调用时加载，普通对话不自动命中（用户的要求） |
 | 令牌校验 | 自己发一次 MCP `initialize` | 复用不了 pi 的连接（连接是异步且不回报失败的）；`initialize` 同时验证「地址是 MCP 端点」和「令牌有效」两件事 |
-| 构建 | 无 | jiti 直接转译 TS 并解析相对 import，扩展目录内多文件可用。零依赖 ⇒ CI 只有 `npm publish` 一步 |
+| 构建 | 无 | jiti 直接转译 TS 并解析相对 import，扩展目录内多文件可用。零依赖 ⇒ 发布工作流无需构建，`npm ci` + typecheck + test 后直接 `npm publish` |
 
 ## 模块划分
 
-`extensions/youtrack/` 内八个文件，依赖方向单向，无环：
+`extensions/youtrack/` 内九个文件，依赖方向单向，无环：
 
 ```
 index.ts ──┬─→ config.ts     读/写 youtrack.json、profile CRUD、原子写与 0600
@@ -85,7 +85,7 @@ schema。`confirm.ts` 不直接碰 TUI 细节，卡片在 `card.ts` 里，桩测
 ```
 
 写入用「临时文件（0600）→ `rename`」，避免半写坏配置；Windows 上 0600 无效，只做尽力而为。
-未知字段保留，`version` 不匹配时只读不写并提示升级。
+未知字段不保留：`loadConfig` 重建 `{ version, active, profiles }`，profile 只留 `baseUrl` / `token` / `addedAt`，下一次 `saveConfig` 会丢掉其余字段（实测：顶层 `note` 字段在 `/youtrack use` 后消失）。`version` 不匹配时只读不写并提示升级。
 
 ## 注册契约
 
@@ -143,7 +143,7 @@ pi.registerMcpServer("youtrack", {
 | `list` | 所有 profile，标出 active，令牌一律只显示尾 4 位 |
 | `use <name>` | 改 `active` 并重注册；不存在则报错列出可选值 |
 | `write on\|off` | 仅改本会话的 `writeEnabled` 并重注册。`on` 时提示「仅本会话有效，工具正在重连」 |
-| `remove <name>` | 确认后删除；删的是 active 则清空 `active` 并 `unregisterMcpServer("youtrack")` |
+| `remove <name>` | 确认后删除；删的是 active 则回退到剩余的第一个 profile 并重注册，没有剩余才清空 `active` 并 `unregisterMcpServer("youtrack")` |
 
 未配置时任何子命令都只输出一句「尚未配置，运行 `/youtrack setup`」，不主动弹窗、不在启动时打扰。
 
@@ -208,12 +208,13 @@ pi.registerMcpServer("youtrack", {
 
 ```
 package.json          name pi-youtrack, keywords ["pi-package"], pi.extensions / pi.skills
-extensions/youtrack/  index.ts config.ts register.ts probe.ts status.ts
+extensions/youtrack/  index.ts card.ts config.ts confirm.ts fields.ts mcp.ts probe.ts register.ts status.ts
 skills/youtrack/      SKILL.md
-.github/workflows/    release.yml：push v* tag → npm publish --provenance --access public
+.github/workflows/    release.yml：push v* tag → npm publish --access public（OIDC 可信发布）
 README.md CHANGELOG.md LICENSE(MIT)
 ```
 
 `pi-package` keyword 是 pi.dev/packages 收录的唯一条件（它索引 npm，不是独立注册表）。
 宿主提供的 `@earendil-works/pi-coding-agent` 只作 `peerDependencies: "*"`（仅类型引用），
-不进 `dependencies`；运行时无第三方依赖。发布需要仓库侧一次性配置 `NPM_TOKEN` secret。
+不进 `dependencies`；运行时无第三方依赖。发布走 npm 可信发布（OIDC）：workflow 设 `id-token: write`，
+无需仓库侧配置任何 secret，provenance 由 npm 自动生成。
