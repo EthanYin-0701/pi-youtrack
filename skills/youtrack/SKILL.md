@@ -106,12 +106,44 @@ takes only `project` and `summary`, and can be updated afterwards.
 
 `add_attachment` takes the `createdIssue.id` from the create result as its target.
 
-## Reading and commenting
+## Reading an issue
 
 - `get_issue` returns the summary, description, links, attachments, tags, votes, recent comments, and custom
   fields — but not the full comment history. Use `get_issue_comments` to page through it.
-- `add_issue_comment` writes Markdown and returns a `commentId` that `add_attachment` can target.
 - Quote ids and URLs exactly as they appear in tool results; never restate an id you have not seen.
+
+## Commenting on an issue
+
+A comment lands on a **known issue link** — the user pastes a URL such as
+`https://<site>.youtrack.cloud/issue/SA-123`. Follow these steps in order; each one has been skipped before.
+
+1. **Check write access.** If `add_issue_comment` is missing from the tool list, the session is read-only:
+   say so, ask the user to run `/youtrack write on`, and stop.
+2. **Resolve the link.** The readable id is the segment after `/issue/`. If the link's host is not the
+   active site (check `/youtrack status`), say so and suggest `/youtrack use <name>` — never post to a
+   different site silently. Confirm the issue exists with `get_issue` and read its recent comments for
+   context; `get_issue_comments` pages the history when it matters.
+3. **Draft the comment.** Free-form Markdown: keep the user's wording, keep it short, and reference only
+   facts and ids that appeared in tool results.
+4. **Ask on the card, then wait.** Before the call, the user must approve the draft and pick the comment's
+   visibility:
+
+   - If a tool named `ask_user_question` is available: call it — and **nothing else in that response** —
+     with two questions, in order:
+     1. The question text shows the issue id and the draft and asks whether to post it. First option
+        `Post as drafted (Recommended)`, second a genuine rejection like `Rewrite the text`.
+     2. `Visibility` — `Inherit from the issue (Recommended)` (omit `permittedUsers` / `permittedGroups`)
+        or `Restrict to users or groups` (type the logins or group names through the automatic Other row,
+        resolve them with `find_user` / `find_user_groups`, and pass what those tools return as
+        `permittedUsers` / `permittedGroups`).
+     Wait for the answers and call `add_issue_comment` in a **later turn** — never in the same response as
+     the card. A rejection returns to step 3 with what the user said; never retry the same draft unchanged.
+   - Without that tool: print the draft and the visibility question in chat and wait for a reply.
+   - A session with no user to answer (scripted, `pi -p`): post directly and note that no approval was
+     possible.
+5. **Post, then report.** `add_issue_comment` takes `issueId` (readable or internal), `text`, and the
+   optional `permittedUsers` / `permittedGroups`. Quote the returned `commentId` — the target
+   `add_attachment` accepts — and the issue URL exactly as returned.
 
 ## Work items
 
