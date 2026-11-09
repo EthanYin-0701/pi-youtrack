@@ -200,6 +200,43 @@ seed(
 	eq("remove falls back to the remaining site", afterRemove.active, "acme");
 }
 
+// ------------------------------------------- stale write-back (PYP-5) ---
+// use / remove / list must operate on a fresh read of the file, not the in-memory
+// snapshot taken at load time: a profile added by another session in between would
+// otherwise be silently deleted from disk together with its token.
+clearEnv();
+seed({ acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:aaaa1111", addedAt: "2026-01-01T00:00:00.000Z" } }, "acme");
+{
+	const h = harness();
+	await (await loadFactory(dir))(h.api);
+	const command = h.commands.get("youtrack");
+
+	// Another session adds a profile after this extension loaded.
+	seed(
+		{
+			acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:aaaa1111", addedAt: "2026-01-01T00:00:00.000Z" },
+			cust: { baseUrl: "https://yt.customer.com", token: "perm:bbbb2222", addedAt: "2026-01-02T00:00:00.000Z" },
+		},
+		"acme",
+	);
+
+	await command.handler("use acme", h.ctx);
+	const afterUse = JSON.parse(readFileSync(join(dir, "youtrack.json"), "utf8"));
+	check("use keeps a site added by another session", Boolean(afterUse.profiles.cust), JSON.stringify(afterUse));
+	eq("use keeps that site's token", afterUse.profiles.cust?.token, "perm:bbbb2222");
+
+	await command.handler("use cust", h.ctx);
+	eq("use sees a site added by another session", JSON.parse(readFileSync(join(dir, "youtrack.json"), "utf8")).active, "cust");
+
+	await command.handler("list", h.ctx);
+	check("list shows a site added by another session", h.messages.at(-1)?.includes("cust"), h.messages.at(-1));
+
+	await command.handler("remove acme", h.ctx);
+	const afterRemove = JSON.parse(readFileSync(join(dir, "youtrack.json"), "utf8"));
+	check("remove keeps a site added by another session", Boolean(afterRemove.profiles.cust), JSON.stringify(afterRemove));
+	eq("remove falls back to the surviving site", afterRemove.active, "cust");
+}
+
 // ------------------------------------------------------- wait for tools ---
 {
 	const { waitForServerTools } = await load(join(EXT_DIR, "status.ts"), dir);
@@ -227,6 +264,7 @@ seed(
 }
 
 // ---------------------------------------------------------- env override ---
+seed({ acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:abcd1234", addedAt: "2026-01-01T00:00:00.000Z" } }, "acme");
 {
 	const h = harness();
 	process.env.YOUTRACK_URL = "https://env.youtrack.cloud";
