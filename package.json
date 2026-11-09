@@ -1,6 +1,6 @@
 {
 	"name": "pi-youtrack",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "One YouTrack permanent token away from having pi read and write your issues over YouTrack's official MCP server.",
 	"type": "module",
 	"license": "MIT",
@@ -43,6 +43,14 @@
 	"peerDependencies": {
 		"@earendil-works/pi-coding-agent": "*",
 		"@earendil-works/pi-tui": "*"
+	},
+	"peerDependenciesMeta": {
+		"@earendil-works/pi-coding-agent": {
+			"optional": true
+		},
+		"@earendil-works/pi-tui": {
+			"optional": true
+		}
 	},
 	"devDependencies": {
 		"@earendil-works/pi-coding-agent": "^1.5.0",

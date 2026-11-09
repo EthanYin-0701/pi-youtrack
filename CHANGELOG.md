@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.1.2]
+
+- Mark the `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` peer dependencies as optional
+  (`peerDependenciesMeta`). npm 7+ auto-installs peers, so `npm i pi-youtrack` had been pulling the entire
+  pi runtime (`@google/genai`, aws-sdk, `openai`, `protobufjs`, ~120 packages) into consumer projects. The
+  host supplies these at runtime, so installing the package now adds only `pi-youtrack` itself.
+
 ## [0.1.1]
 
 Republish of 0.1.0 with no functional changes, to get the package re-indexed by npm search
