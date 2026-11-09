@@ -5,6 +5,7 @@
  *   npm test
  */
 import { createJiti } from "jiti";
+import { createServer } from "node:http";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -448,6 +449,72 @@ seed({ acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:abcd1234", a
 		const stale = await gate({ toolName: "mcp__youtrack__create_issue", input: { project: "PYP" } }, blockCtx);
 		eq("ask host: a stale questionnaire blocks again", stale?.block, true);
 	}
+}
+
+// ----------------------------------------------------------------- probe ---
+{
+	const probe = await load(join(EXT_DIR, "probe.ts"), dir);
+
+	async function withServer(handler, fn) {
+		const server = createServer(handler);
+		await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+		const { port } = server.address();
+		try {
+			return await fn(`http://127.0.0.1:${port}`);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	}
+
+	await withServer((_req, res) => {
+		res.writeHead(200, { "content-type": "text/html" });
+		res.end("<html>login</html>");
+	}, async (base) => {
+		const result = await probe.probeEndpoint(base, "perm:x", 2000);
+		eq("probe: an html login page is not an endpoint", result.ok, false);
+		eq("probe: html page fails with code endpoint", result.code, "endpoint");
+	});
+
+	await withServer((_req, res) => {
+		res.writeHead(200, { "content-type": "application/json" });
+		res.end(JSON.stringify({ status: "ok" }));
+	}, async (base) => {
+		const result = await probe.probeEndpoint(base, "perm:x", 2000);
+		eq("probe: a rest 200 is not an endpoint", result.ok, false);
+		eq("probe: rest 200 fails with code endpoint", result.code, "endpoint");
+	});
+
+	await withServer((req, res) => {
+		if (req.url === "/mcp") {
+			res.writeHead(302, { location: "/login" });
+			res.end();
+			return;
+		}
+		res.writeHead(200, { "content-type": "text/html" });
+		res.end("<html>sso login</html>");
+	}, async (base) => {
+		const result = await probe.probeEndpoint(base, "perm:x", 2000);
+		eq("probe: a redirect to an sso page is not an endpoint", result.ok, false);
+		eq("probe: sso redirect fails with code endpoint", result.code, "endpoint");
+	});
+
+	await withServer(async (req, res) => {
+		let body = "";
+		for await (const chunk of req) body += chunk;
+		const method = JSON.parse(body || "{}").method;
+		res.writeHead(200, { "content-type": "application/json", "mcp-session-id": "sess-1" });
+		if (method === "initialize") {
+			res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { protocolVersion: "2025-06-18", capabilities: {}, serverInfo: { name: "YouTrack", version: "2025.3" } } }));
+		} else if (method === "tools/list") {
+			res.end(JSON.stringify({ jsonrpc: "2.0", id: 2, result: { tools: [{ name: "search_issues" }, { name: "get_issue" }] } }));
+		} else {
+			res.end("");
+		}
+	}, async (base) => {
+		const result = await probe.probeEndpoint(base, "perm:x", 2000);
+		eq("probe: a real initialize passes", result.ok, true);
+		eq("probe: reports the tool count", result.toolCount, 2);
+	});
 }
 
 rmSync(dir, { recursive: true, force: true });
