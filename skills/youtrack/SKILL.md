@@ -1,6 +1,6 @@
 ---
 name: youtrack
-description: Search, read, and update YouTrack issues, articles, projects, and work items through the YouTrack MCP server registered by the pi-youtrack extension. Use whenever the task involves YouTrack, an issue id like WEB-123, a YouTrack query, or logging work.
+description: Search, read, and update YouTrack issues, articles, projects, and work items through the YouTrack MCP server registered by the pi-youtrack extension. Invoke explicitly with /skill:youtrack whenever the task involves YouTrack, an issue id like WEB-123, a YouTrack query, or logging work.
 disable-model-invocation: true
 ---
 
