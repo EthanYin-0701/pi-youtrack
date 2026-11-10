@@ -6,6 +6,16 @@
 const PROTOCOL_VERSION = "2025-06-18";
 const DEFAULT_TIMEOUT_MS = 15_000;
 
+/** The request id of the `initialize` call; callers must see the same id in the reply. */
+export const INITIALIZE_ID = 1;
+
+/** A 2xx is only success when the body is the JSON-RPC result of our `initialize`. */
+export function isInitializeResult(payload: unknown): boolean {
+	if (typeof payload !== "object" || payload === null) return false;
+	const record = payload as Record<string, unknown>;
+	return record.jsonrpc === "2.0" && record.id === INITIALIZE_ID && typeof record.result === "object" && record.result !== null;
+}
+
 export function mcpUrl(baseUrl: string): string {
 	return `${baseUrl.replace(/\/+$/, "")}/mcp`;
 }
@@ -94,7 +104,7 @@ export async function openSession(
 			token,
 			{
 				jsonrpc: "2.0",
-				id: 1,
+				id: INITIALIZE_ID,
 				method: "initialize",
 				params: {
 					protocolVersion: PROTOCOL_VERSION,

@@ -1,4 +1,4 @@
-import { callMethod, mcpUrl, openSession } from "./mcp.ts";
+import { callMethod, isInitializeResult, mcpUrl, openSession } from "./mcp.ts";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -62,6 +62,16 @@ export async function probeEndpoint(
 
 	const problem = rpcError(opened.payload);
 	if (problem) return { ok: false, code: "http", message: `MCP initialize failed: ${problem}` };
+	// A 2xx alone proves nothing: anything but the JSON-RPC result of our initialize (an HTML
+	// login page, a REST reply, a followed SSO redirect) is not an MCP endpoint, and pi's real
+	// connection would fail the same way.
+	if (!isInitializeResult(opened.payload)) {
+		return {
+			ok: false,
+			code: "endpoint",
+			message: `Not an MCP endpoint at ${endpoint}: HTTP ${opened.status} but no JSON-RPC initialize result (an SSO login or proxy page may be answering instead)`,
+		};
+	}
 	if (!opened.session) return { ok: true };
 
 	let toolCount: number | undefined;
