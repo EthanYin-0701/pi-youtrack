@@ -86,6 +86,9 @@ schema。`confirm.ts` 不直接碰 TUI 细节，卡片在 `card.ts` 里，桩测
 
 写入用「临时文件（0600）→ `rename`」，避免半写坏配置；Windows 上 0600 无效，只做尽力而为。
 未知字段不保留：`loadConfig` 重建 `{ version, active, profiles }`，profile 只留 `baseUrl` / `token` / `addedAt`，下一次 `saveConfig` 会丢掉其余字段（实测：顶层 `note` 字段在 `/youtrack use` 后消失）。`version` 不匹配时只读不写并提示升级。
+**读-改-写必须基于新鲜重读**：`use` / `remove`（以及只读展示的 `list`）在操作前用 `loadConfig()`
+重读文件，加载时的内存快照只用于注册连接，绝不作为回写基础——否则另一个会话刚写入的 profile 会连同
+token 被静默删掉（PYP-5）。并发写仍无锁、最后写者胜，但每个写者都基于自己读到的最新文件。
 
 ## 注册契约
 
