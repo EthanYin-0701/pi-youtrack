@@ -151,9 +151,10 @@ pi -e .          # load this package from disk for one session
 
 No build step: pi loads the TypeScript extension directly.
 
-Release: `npm version patch && git push --follow-tags`. The `Release` workflow publishes to npm with
-provenance once the `NPM_TOKEN` secret is set. The `pi-package` keyword in `package.json` is what makes the
-package appear on [pi.dev/packages](https://pi.dev/packages).
+Release: `npm version patch && git push --follow-tags`. The `Release` workflow publishes to npm
+through trusted publishing (OIDC) — `id-token: write`, no secret to configure — and npm attaches
+provenance. The `pi-package` keyword in `package.json` is what makes the package appear on
+[pi.dev/packages](https://pi.dev/packages).
 
 ## License
 
