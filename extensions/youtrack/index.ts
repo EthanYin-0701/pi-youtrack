@@ -219,6 +219,11 @@ export default async function youtrack(pi: ExtensionAPI) {
 	}
 
 	async function runUse(ctx: ExtensionCommandContext, name: string | undefined): Promise<void> {
+		loaded = loadConfig();
+		if (loaded.kind === "invalid") {
+			ctx.ui.notify(`The config file is broken, nothing written: ${loaded.reason}`, "error");
+			return;
+		}
 		if (loaded.kind !== "ok") {
 			ctx.ui.notify("Not configured yet — run `/youtrack setup`.", "warning");
 			return;
@@ -267,6 +272,11 @@ export default async function youtrack(pi: ExtensionAPI) {
 	}
 
 	async function runRemove(ctx: ExtensionCommandContext, name: string | undefined): Promise<void> {
+		loaded = loadConfig();
+		if (loaded.kind === "invalid") {
+			ctx.ui.notify(`The config file is broken, nothing written: ${loaded.reason}`, "error");
+			return;
+		}
 		if (loaded.kind !== "ok") {
 			ctx.ui.notify("Not configured yet — run `/youtrack setup`.", "warning");
 			return;
@@ -320,6 +330,7 @@ export default async function youtrack(pi: ExtensionAPI) {
 					showStatus(ctx.cwd);
 					return;
 				case "list":
+					loaded = loadConfig();
 					report(formatProfileList(loaded));
 					return;
 				case "setup":
