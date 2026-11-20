@@ -169,6 +169,16 @@ seed({ acme: { baseUrl: "https://acme.youtrack.cloud", token: "perm:abcd1234", a
 	check("status counts tools", /0 registered/.test(status), status);
 }
 
+// pi caches the factory, so a replaced session runs the same module instance with a fresh API.
+{
+	const factory = await loadFactory(dir);
+	const first = harness();
+	await factory(first.api);
+	const second = harness();
+	await factory(second.api);
+	eq("a replaced session registers again", second.registrations.length, 1);
+}
+
 // --------------------------------------------------------------- profiles ---
 clearEnv();
 seed(

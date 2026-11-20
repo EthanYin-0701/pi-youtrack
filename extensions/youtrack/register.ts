@@ -43,22 +43,25 @@ function fingerprintOf(desired: Registration): string {
 
 /**
  * pi decides whether a re-registration changed the config by object identity, so registering again
- * unconditionally would drop and reconnect the server on every session. Track the fingerprint here.
+ * unconditionally would drop and reconnect the server on every session. Track the fingerprint here,
+ * per extension API: pi caches the factory, so this module outlives a session, while a replaced
+ * session (/new, /resume, /reload) gets a fresh API with an empty server registry.
  */
-let lastFingerprint: string | undefined;
+const lastFingerprints = new WeakMap<ExtensionAPI, string>();
 
 /** Whether a change was actually handed to pi. */
 export function syncRegistration(pi: ExtensionAPI, desired: Registration | undefined): boolean {
+	const last = lastFingerprints.get(pi);
 	if (!desired) {
-		if (lastFingerprint === undefined) return false;
+		if (last === undefined) return false;
 		pi.unregisterMcpServer(SERVER_NAME);
-		lastFingerprint = undefined;
+		lastFingerprints.delete(pi);
 		return true;
 	}
 
 	const next = fingerprintOf(desired);
-	if (next === lastFingerprint) return false;
+	if (next === last) return false;
 	pi.registerMcpServer(SERVER_NAME, buildServerConfig(desired));
-	lastFingerprint = next;
+	lastFingerprints.set(pi, next);
 	return true;
 }
