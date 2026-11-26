@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.1.4]
+
+- Fix: the YouTrack MCP server is registered again after `/new`, `/resume`, or `/fork`. pi caches the
+  extension factory, so the module-level registration fingerprint survived session replacement while
+  the new session started with an empty MCP registry, and the server never came back. The fingerprint
+  is now kept per extension API (#7).
+- Fix: `/youtrack setup` no longer accepts any HTTP 2xx as a working endpoint. Validation now requires
+  a JSON-RPC `initialize` result, so an SSO login or proxy page answering at `/mcp` is reported as
+  "Not an MCP endpoint" instead of being saved (#6).
+- Fix: `/youtrack use`, `remove`, and `list` re-read `youtrack.json` before acting, so writing back no
+  longer drops sites added or changed outside the current session; a broken file is reported and left
+  untouched (#4).
+- The create-issue card's Subsystem hint now reads "Leave empty to unset" (#3).
+
 ## [0.1.3]
 
 - The YouTrack skill now covers commenting on issues: resolving a pasted issue link, drafting the
